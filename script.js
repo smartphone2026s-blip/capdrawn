@@ -19,6 +19,131 @@ const APP = {
   vipBenefits: ['Emblema exclusivo','Selo VIP','Nome em destaque','Super Chat','Live','IA integrada'],
 };
 
+// ═══════════════════════════════════════
+// PERSISTÊNCIA DE SESSÃO (localStorage)
+// ═══════════════════════════════════════
+const SESSION_KEY = 'capdrawnn_session';
+const EMAILS_KEY  = 'capdrawnn_emails';   // { "joao@cpd.com": { senha_hash, nascimento, handle } }
+const USERS_KEY   = 'capdrawnn_users';
+
+function saveSession() {
+  if (!APP.me) { localStorage.removeItem(SESSION_KEY); return; }
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify({ handle: APP.me.handle })); } catch(e) {}
+}
+
+function loadSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return;
+    const { handle } = JSON.parse(raw);
+    if (handle && USERS[handle]) { loginUser(handle); }
+  } catch(e) {}
+}
+
+function saveUsers() {
+  try {
+    const exportable = {};
+    for (const [k, u] of Object.entries(USERS)) {
+      exportable[k] = { ...u, avatar: u.avatar && u.avatar.startsWith('blob:') ? null : u.avatar };
+    }
+    localStorage.setItem(USERS_KEY, JSON.stringify(exportable));
+  } catch(e) {}
+}
+
+function loadUsers() {
+  try {
+    const raw = localStorage.getItem(USERS_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    for (const [k, u] of Object.entries(saved)) { USERS[k] = u; }
+  } catch(e) {}
+}
+
+function getEmails() {
+  try { return JSON.parse(localStorage.getItem(EMAILS_KEY) || '{}'); } catch(e) { return {}; }
+}
+
+function saveEmails(emails) {
+  try { localStorage.setItem(EMAILS_KEY, JSON.stringify(emails)); } catch(e) {}
+}
+// ═══════════════════════════════════════
+// SISTEMA DE EMAIL @cpd.com
+// ═══════════════════════════════════════
+let emailCriado = null; // email verificado nesta sessão antes de criar conta
+
+function verificarEmail(email) {
+  const emails = getEmails();
+  return emails.hasOwnProperty(email.toLowerCase());
+}
+
+function criarEmailCapDrawn() {
+  const nome  = (document.getElementById('emailNome')?.value || '').trim().toLowerCase();
+  const senha = (document.getElementById('emailSenha')?.value || '').trim();
+  const nasc  = (document.getElementById('emailNasc')?.value  || '').trim();
+  const erroEl = document.getElementById('emailErro');
+
+  const showErr = (msg) => { if(erroEl){erroEl.textContent=msg;erroEl.style.display='block';} };
+  if(erroEl) erroEl.style.display='none';
+
+  if (!nome)  { showErr('⚠️ Digite o nome do email!'); return; }
+  if (!senha || senha.length < 6) { showErr('⚠️ Senha deve ter pelo menos 6 caracteres!'); return; }
+  if (!nasc)  { showErr('⚠️ Informe sua data de nascimento!'); return; }
+
+  // Verificar maioridade (13+)
+  const nascDate = new Date(nasc);
+  const age = Math.floor((Date.now() - nascDate) / (365.25 * 24 * 3600 * 1000));
+  if (age < 13) { showErr('⚠️ Você precisa ter pelo menos 13 anos!'); return; }
+
+  const emailCompleto = nome + '@cpd.com';
+
+  if (verificarEmail(emailCompleto)) {
+    showErr('⚠️ Este email já está em uso! Tente outro nome.');
+    return;
+  }
+
+  // Salva email
+  const emails = getEmails();
+  emails[emailCompleto] = { senha, nascimento: nasc, handle: null };
+  saveEmails(emails);
+
+  emailCriado = emailCompleto;
+  closeModal('emailModal');
+
+  // Atualiza label no modal de registro
+  const lbl = document.getElementById('regEmailShow');
+  if (lbl) lbl.textContent = emailCompleto;
+
+  toast('✅ Email ' + emailCompleto + ' criado! Agora crie seu canal.');
+  setTimeout(() => openModal('regModal'), 400);
+}
+
+async function apiCriarEmail(nome, senha, nascimento) {
+  return await apiCall('POST', '/email/criar', { nome, senha, nascimento });
+}
+
+async function apiVerificarEmail(email) {
+  return await apiCall('GET', '/email/verificar/' + encodeURIComponent(email));
+}
+
+
+
+// ═══════════════════════════════════════
+// FILTRO DE CONTEÚDO IMPRÓPRIO
+// ═══════════════════════════════════════
+const PALAVRAS_PROIBIDAS = [
+  'merda','porra','caralho','buceta','xoxota','viado','piroca','pau','cu ','fdp',
+  'filha da puta','vadia','puta','vagabunda','desgraça','arrombado','inferno',
+  'imbecil','idiota','retardado','lixo','babaca','cuzão','cuzao',
+  'foda','fode','fodendo','fodido','fuder','fudi',
+  'shit','fuck','bitch','asshole','nigger','cunt','dick','pussy'
+];
+
+function filtrarConteudo(texto) {
+  if (!texto) return false;
+  const lower = texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return PALAVRAS_PROIBIDAS.some(p => lower.includes(p.normalize('NFD').replace(/[\u0300-\u036f]/g, '')));
+}
+
 const USERS = {};
 let COMMENTS = [
   {id:1,handle:'capdrawnn',text:'Bem-vindos ao CapDrawn! 🎵 Aqui você pode remover silêncios do seu áudio e conectar com outros criadores.',time:'1h atrás',likes:12,likedBy:[],pinned:true,sc:null},
@@ -387,13 +512,13 @@ async function sendComment() {
   if(!APP.me){openLogin();return;}
   const inp=document.getElementById('compInp'),text=inp.value.trim();
   if(!text)return;
+  if(filtrarConteudo(text)){ toast('⚠️ Conteúdo não permitido!'); return; }
   const c={id:nextId++,handle:APP.me.handle,text,time:'agora',likes:0,likedBy:[],pinned:false,sc:null};
   COMMENTS.unshift(c);
   APP.me.commentCount=(APP.me.commentCount||0)+1;
   inp.value='';
   hideMentDrop();
   renderComments();
-  // API call (fire-and-forget, fallback already in memory)
   postCommentAPI(text);
 }
 
@@ -498,14 +623,47 @@ function openLogin(){openModal('loginModal');}
 function openRegister(){closeModal('loginModal');openModal('regModal');}
 
 async function doLogin() {
-  const h=document.getElementById('liHandle').value.trim().toLowerCase();
-  if(!USERS[h]){toast('⚠️ Usuário não encontrado. Crie uma conta!');return;}
+  const emailNome = (document.getElementById('liHandle')?.value || '').trim().toLowerCase();
+  const senha     = (document.getElementById('liSenha')?.value  || '').trim();
+  const erroEl    = document.getElementById('loginErro');
+  if (erroEl) erroEl.style.display = 'none';
+
+  const showErr = (msg) => { if(erroEl){erroEl.textContent=msg;erroEl.style.display='block';} toast(msg); };
+
+  if (!emailNome) { showErr('⚠️ Digite seu email!'); return; }
+  if (!senha)     { showErr('⚠️ Digite sua senha!'); return; }
+
+  const emailCompleto = emailNome.includes('@') ? emailNome : emailNome + '@cpd.com';
+  const emails = getEmails();
+
+  if (!emails[emailCompleto]) {
+    showErr('⚠️ Email não encontrado. Crie seu email @cpd.com primeiro!');
+    return;
+  }
+  if (emails[emailCompleto].senha !== senha) {
+    showErr('⚠️ Senha incorreta!');
+    return;
+  }
+
+  const handle = emails[emailCompleto].handle;
+  if (!handle || !USERS[handle]) {
+    // Email existe mas canal não criado ainda
+    emailCriado = emailCompleto;
+    const lbl = document.getElementById('regEmailShow');
+    if (lbl) lbl.textContent = emailCompleto;
+    closeModal('loginModal');
+    toast('Email verificado! Crie seu canal agora.');
+    setTimeout(() => openModal('regModal'), 300);
+    return;
+  }
+
   closeModal('loginModal');
-  loginUser(h);
+  loginUser(handle);
 }
 
 function loginUser(handle) {
   APP.me=USERS[handle];const u=APP.me;
+  saveSession(); saveUsers();
   const btnL=document.getElementById('btnLogin');const btnR=document.getElementById('btnReg');
   if(btnL)btnL.style.display='none';if(btnR)btnR.style.display='none';
   const nav=document.getElementById('navAv');
@@ -523,6 +681,7 @@ function loginUser(handle) {
 
 function logout() {
   APP.me=null;
+  saveSession();
   const btnL=document.getElementById('btnLogin');const btnR=document.getElementById('btnReg');
   if(btnL)btnL.style.display='';if(btnR)btnR.style.display='';
   const nav=document.getElementById('navAv');if(nav)nav.style.display='none';
@@ -776,8 +935,9 @@ function buildVidCard(v){
   const isVer=(u.verified||u.official)?'<span class="prof-verified-check" style="width:13px;height:13px;font-size:.5rem;">✓</span>':'';
   const liked=v.likedBy.includes(APP.me?.handle);
   div.innerHTML=`
-    <video src="${v.blobUrl}" loop muted playsinline style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0;cursor:pointer;" onclick="toggleVidPlay(this,${v.id})"></video>
+    <video src="${v.blobUrl}" loop muted playsinline style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0;cursor:pointer;" id="vidEl${v.id}" onclick="toggleVidPlay(this,${v.id})"></video>
     <div class="vid-overlay"></div>
+    <button class="vid-mute-btn" id="muteBtn${v.id}" onclick="toggleVidMute(${v.id})" title="Som">🔇</button>
     <div class="vid-pause-icon" id="pauseIcon${v.id}"><svg width="28" height="28" viewBox="0 0 28 28" fill="white"><rect x="6" y="5" width="5" height="18" rx="2"/><rect x="17" y="5" width="5" height="18" rx="2"/></svg></div>
     <div class="vid-info">
       <div class="vid-author" onclick="openProfileFromFeed('${v.handle}')">
@@ -804,14 +964,47 @@ function buildVidCard(v){
   return div;
 }
 
+let currentFocusedVidId = null;
+
 function setupVidObserver(container){
   const observer=new IntersectionObserver(entries=>{
     entries.forEach(e=>{
-      const vid=e.target.querySelector('video');if(!vid)return;
-      if(e.isIntersecting){vid.play().catch(()=>{});}else{vid.pause();}
+      const item = e.target;
+      const vid  = item.querySelector('video');
+      if(!vid) return;
+      const vidId = item.dataset.vidId;
+      if(e.isIntersecting){
+        vid.muted = true; // começa mudo para autoplay funcionar
+        vid.play().catch(()=>{});
+        // Após 300ms, tira o mudo se o usuário não silenciou manualmente
+        setTimeout(() => {
+          if (item.classList.contains('in-view')) {
+            const muteState = item.dataset.userMuted === 'true';
+            vid.muted = muteState;
+            const btn = document.getElementById('muteBtn' + vidId);
+            if (btn) btn.textContent = muteState ? '🔇' : '🔊';
+          }
+        }, 300);
+        item.classList.add('in-view');
+        currentFocusedVidId = vidId;
+      } else {
+        vid.pause();
+        vid.muted = true;
+        item.classList.remove('in-view');
+      }
     });
-  },{threshold:0.6});
+  },{threshold:0.65});
   container.querySelectorAll('.vid-snap-item').forEach(el=>observer.observe(el));
+}
+
+function toggleVidMute(vidId) {
+  const vid = document.getElementById('vidEl' + vidId);
+  const btn = document.getElementById('muteBtn' + vidId);
+  const item = vid?.closest('.vid-snap-item');
+  if (!vid) return;
+  vid.muted = !vid.muted;
+  if (btn) btn.textContent = vid.muted ? '🔇' : '🔊';
+  if (item) item.dataset.userMuted = String(vid.muted);
 }
 
 function toggleVidPlay(vidEl,vidId){
@@ -1004,8 +1197,14 @@ document.addEventListener('DOMContentLoaded', () => {
   USERS['capdrawnn'] = {name:'CapDrawn Oficial',handle:'capdrawnn',desc:'Canal oficial da plataforma CapDrawn. Processamento de áudio profissional com IA.',color:'#0052e0',avatar:null,joined:'Jan 2025',followers:4200,audioCount:88,commentCount:3,audios:[],videos:[],vip:true,verified:true,official:true};
   USERS['criador_oficial'] = {name:'João Criador',handle:'criador_oficial',desc:'Podcaster e produtor de conteúdo. Uso o CapDrawn todo dia!',color:'#e0245e',avatar:null,joined:'Mar 2025',followers:120,audioCount:5,commentCount:1,audios:[{name:'Podcast EP01.mp3',icon:'🎵',date:'há 2 dias',locked:false},{name:'Beat_Novo.wav',icon:'🎵',date:'há 5 dias',locked:true}],videos:[],vip:false,verified:false,official:false};
 
+  // Carregar usuários salvos do localStorage
+  loadUsers();
+
   renderComments();
   renderAdmEmblemas();
+
+  // Restaurar sessão (mantém login ao recarregar)
+  loadSession();
 
   // Try loading comments from API
   loadCommentsFromAPI();
