@@ -1,6 +1,4 @@
-import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
+import prisma from '../../../lib/prisma'
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).end()
@@ -23,7 +21,7 @@ export default async function handler(req, res) {
 
     res.json({ ok: true, videos, page, limit })
   } catch (e) {
-    console.error(e)
-    res.status(500).json({ error: 'Erro ao buscar vídeos' })
+    console.error('[feed] erro:', e)
+    res.status(500).json({ error: 'Erro ao buscar vídeos', detail: e.message })
   }
 }
