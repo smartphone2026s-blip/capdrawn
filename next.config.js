@@ -1,4 +1,9 @@
 /** @type {import('next').NextConfig} */
-module.exports = {
-  experimental: { serverComponentsExternalPackages: ['cloudinary'] }
+const nextConfig = {
+  serverExternalPackages: ['cloudinary', 'bcryptjs', 'jsonwebtoken', 'formidable'],
+  images: {
+    domains: ['res.cloudinary.com'],
+  },
 }
+
+module.exports = nextConfig
