@@ -742,10 +742,6 @@ h1 .grad{background:linear-gradient(135deg,var(--blue),#6090ff);-webkit-backgrou
 
 }
 
-</style>
-
-</head>
-
 /* ══ CANAL MODAL / EMAIL ══ */
 .email-prefix-row{display:flex;align-items:center;border:1.5px solid var(--border);border-radius:var(--r);overflow:hidden;transition:border-color .15s;}
 .email-prefix-row:focus-within{border-color:var(--blue);}
@@ -787,7 +783,9 @@ h1 .grad{background:linear-gradient(135deg,var(--blue),#6090ff);-webkit-backgrou
 .vid-report-btn{position:absolute;top:56px;right:12px;z-index:10;background:rgba(0,0,0,.4);border:none;border-radius:20px;padding:4px 10px;font-size:.65rem;font-weight:700;color:rgba(255,255,255,.7);cursor:pointer;backdrop-filter:blur(4px);}
 .vid-report-btn:hover{background:rgba(255,0,0,.3);color:#fff;}
 </style>
+
 </head>
+
 <body>
 <!-- ══ TOP BAR ══ -->
 
@@ -853,7 +851,7 @@ h1 .grad{background:linear-gradient(135deg,var(--blue),#6090ff);-webkit-backgrou
 
     <div class="sec-title">Canais da Rede</div>
 
-    <p class="sec-sub">Bots misteriosos publicam memes virais no feed. Clique num canal para ver o perfil.</p>
+    <p class="sec-sub">Canais que publicaram vídeos na rede. Clique para ver o perfil.</p>
 
     <div class="preview-scroll" id="previewScroll">
 
@@ -1884,23 +1882,61 @@ function getRandomBot(){
 function buildPreviewCards(){
   const scroll = document.getElementById('previewScroll');
   scroll.innerHTML = '';
-  const keys = Object.keys(USERS).filter(k=>USERS[k].isBot).slice(0,12);
-  keys.forEach(handle=>{
+
+  // Somente canais com vídeos reais enviados ao banco de dados
+  const videosWithChannel = MEME_VIDEOS.filter(v => v.handle && USERS[v.handle]);
+  const seenHandles = new Set();
+  const channelHandles = [];
+  videosWithChannel.forEach(v => {
+    if(!seenHandles.has(v.handle)){
+      seenHandles.add(v.handle);
+      channelHandles.push(v.handle);
+    }
+  });
+
+  if(channelHandles.length === 0){
+    // Nenhum vídeo publicado ainda
+    scroll.innerHTML = `<div style="
+      width:100%;padding:28px 16px;text-align:center;
+      background:var(--bg);border:1.5px dashed var(--border2);
+      border-radius:14px;color:var(--t3);font-size:.82rem;line-height:1.7;">
+      <div style="font-size:2rem;margin-bottom:8px;">🎬</div>
+      <strong style="color:var(--t2);display:block;margin-bottom:4px;">Nenhum vídeo publicado ainda</strong>
+      Seja o primeiro a publicar um vídeo na rede!
+    </div>`;
+    return;
+  }
+
+  const gradMap={'av-1':'#1d4ed8','av-2':'#7c3aed','av-3':'#0f766e','av-4':'#b45309','av-5':'#be123c','av-6':'#1e3a5f','av-7':'#166534','av-8':'#374151'};
+
+  channelHandles.slice(0,12).forEach(handle=>{
     const u = USERS[handle];
+    const latestVid = MEME_VIDEOS.filter(v=>v.handle===handle).slice(-1)[0];
     const card = document.createElement('div');
     card.className = 'preview-card';
     card.onclick = () => openProfile(handle);
-    const emoji = rand(MEME_EMOJIS);
-    card.innerHTML = `
-      <div class="preview-card-bg">${emoji}</div>
-      <div class="preview-card-overlay"></div>
-      <div class="preview-card-play"><svg width="16" height="16" viewBox="0 0 16 16" fill="white"><path d="M5 3l9 5-9 5V3z"/></svg></div>
-      <div class="preview-card-info">
-        <div class="preview-card-name">${u.name}</div>
-        <div class="preview-card-views">${u.followersFmt} seguidores</div>
-      </div>`;
-    const gradMap={'av-1':'#1d4ed8','av-2':'#7c3aed','av-3':'#0f766e','av-4':'#b45309','av-5':'#be123c','av-6':'#1e3a5f','av-7':'#166534','av-8':'#374151'};
     card.style.background = gradMap[u.avClass] || '#111';
+
+    if(latestVid && latestVid.blobUrl){
+      card.innerHTML = `
+        <video src="${latestVid.blobUrl}" muted preload="metadata" playsinline
+          style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;"
+          onloadedmetadata="this.currentTime=0.5"></video>
+        <div class="preview-card-overlay"></div>
+        <div class="preview-card-play"><svg width="16" height="16" viewBox="0 0 16 16" fill="white"><path d="M5 3l9 5-9 5V3z"/></svg></div>
+        <div class="preview-card-info">
+          <div class="preview-card-name">${u.name}</div>
+          <div class="preview-card-views">${u.followersFmt} seguidores</div>
+        </div>`;
+    } else {
+      card.innerHTML = `
+        <div class="preview-card-overlay"></div>
+        <div class="preview-card-play"><svg width="16" height="16" viewBox="0 0 16 16" fill="white"><path d="M5 3l9 5-9 5V3z"/></svg></div>
+        <div class="preview-card-info">
+          <div class="preview-card-name">${u.name}</div>
+          <div class="preview-card-views">${u.followersFmt} seguidores</div>
+        </div>`;
+    }
     scroll.appendChild(card);
   });
 }
@@ -2681,73 +2717,32 @@ function renderProfVideos(u, isMe){
 
   const memeSection = document.getElementById('profMemeSection');
 
-  
+  // Nunca mostra vídeos fake — apenas vídeos reais do banco de dados
+  memeSection.style.display = 'none';
 
-  if(u.isBot){
+  if(!u.videos || !u.videos.length){
 
-    // Show meme thumbs for bot
+    noVids.style.display = 'block';
 
-    memeSection.style.display = 'block';
-
-    noVids.style.display = 'none';
+    noVids.textContent = isMe ? 'Publique seu primeiro vídeo (em breve)!' : 'Nenhum vídeo ainda.';
 
     grid.innerHTML = '';
 
-    const count = randInt(3,9);
+  } else {
 
-    for(let i=0;i<count;i++){
+    noVids.style.display = 'none';
 
-      const thumb = document.createElement('div');
+    grid.innerHTML = u.videos.map(v=>`
 
-      thumb.className = 'prof-vid-thumb';
+      <div class="prof-vid-thumb">
 
-      const emoji = rand(MEME_EMOJIS);
-
-      const views = formatNum(randInt(10000,9900000));
-
-      thumb.innerHTML = `
-
-        <div class="thumb-placeholder">${emoji}</div>
+        <video src="${v.blobUrl}" muted preload="metadata" style="width:100%;height:100%;object-fit:cover;" onloadedmetadata="this.currentTime=0.5"></video>
 
         <div class="thumb-overlay"><span class="thumb-play">▶</span></div>
 
-        <div class="thumb-views">👁 ${views}</div>`;
+        <div class="thumb-views">👁 ${formatNum(v.views||0)}</div>
 
-      thumb.onclick = () => { closeProfile(); openVideoFeed(); };
-
-      grid.appendChild(thumb);
-
-    }
-
-  } else {
-
-    memeSection.style.display = 'none';
-
-    if(!u.videos||!u.videos.length){
-
-      noVids.style.display = 'block';
-
-      noVids.textContent = isMe ? 'Publique seu primeiro vídeo (em breve)!' : 'Nenhum vídeo ainda.';
-
-      grid.innerHTML = '';
-
-    } else {
-
-      noVids.style.display = 'none';
-
-      grid.innerHTML = u.videos.map(v=>`
-
-        <div class="prof-vid-thumb">
-
-          <video src="${v.blobUrl}" muted preload="metadata" style="width:100%;height:100%;object-fit:cover;" onloadedmetadata="this.currentTime=0.5"></video>
-
-          <div class="thumb-overlay"><span class="thumb-play">▶</span></div>
-
-          <div class="thumb-views">👁 ${formatNum(v.views||0)}</div>
-
-        </div>`).join('');
-
-    }
+      </div>`).join('');
 
   }
 
