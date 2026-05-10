@@ -19,6 +19,7 @@ model User {
   isVip        Boolean  @default(false)
   isVerified   Boolean  @default(false)
   channelEmail String?
+  link         String?  @default("")
   followers    Int      @default(0)
   createdAt    DateTime @default(now())
 
