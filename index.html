@@ -1221,9 +1221,13 @@ h1 .grad{background:linear-gradient(135deg,var(--blue),#6090ff);-webkit-backgrou
 
     <div class="modal-body">
 
-      <div class="frow"><label>@ Usuário</label><input class="finp" id="liHandle" placeholder="seu_usuario"/></div>
+      <div class="frow"><label>Email ou usuário</label><input class="finp" id="liEmail" placeholder="usuario ou usuario@capdrawn.com" autocomplete="email"/></div>
 
-      <p style="font-size:.72rem;color:var(--t3);">Modo offline: use qualquer @ criado nesta sessão.</p>
+      <div class="frow"><label>Senha</label><input class="finp" type="password" id="liPass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"/></div>
+
+      <p id="loginErr" style="font-size:.75rem;color:var(--red);display:none;margin-top:4px;"></p>
+
+      <p style="font-size:.72rem;color:var(--t3);margin-top:6px;">Não tem conta? <a onclick="openRegister()" style="color:var(--blue);cursor:pointer;font-weight:600;">Criar conta →</a></p>
 
     </div>
 
@@ -1231,7 +1235,7 @@ h1 .grad{background:linear-gradient(135deg,var(--blue),#6090ff);-webkit-backgrou
 
       <button class="btn-out" onclick="closeModal('loginModal')">Cancelar</button>
 
-      <button class="btn-main" onclick="doLogin()">Entrar →</button>
+      <button class="btn-main" id="loginBtn" onclick="doLogin()">Entrar →</button>
 
     </div>
 
@@ -1285,6 +1289,10 @@ h1 .grad{background:linear-gradient(135deg,var(--blue),#6090ff);-webkit-backgrou
 
       <div class="frow"><label>@ Usuário *</label><input class="finp" id="regHandle" placeholder="joaosilva"/></div>
 
+      <div class="frow"><label>Email <span style="font-size:.7rem;color:var(--t3);">(vira nome@capdrawn.com)</span></label><div style="display:flex;align-items:center;gap:0;border:1.5px solid var(--border);border-radius:10px;overflow:hidden;background:var(--w);"><input class="finp" id="regEmail" placeholder="seunome" style="border:none;border-radius:0;flex:1;margin:0;" oninput="updateEmailPreview()"/><span style="padding:0 10px;color:var(--t3);font-size:.78rem;white-space:nowrap;background:var(--bg);">@capdrawn.com</span></div><small id="emailPreview" style="color:var(--blue);font-size:.7rem;margin-top:2px;display:block;"></small></div>
+
+      <div class="frow"><label>Senha *</label><input class="finp" type="password" id="regPass" placeholder="Mínimo 6 caracteres" autocomplete="new-password"/></div>
+
       <div class="frow"><label>Descrição do canal</label><textarea class="finp" id="regDesc" placeholder="Fale sobre você…" style="min-height:60px;resize:none;"></textarea></div>
 
       <div class="frow">
@@ -1305,7 +1313,9 @@ h1 .grad{background:linear-gradient(135deg,var(--blue),#6090ff);-webkit-backgrou
 
       </div>
 
-      <p style="font-size:.72rem;color:var(--t3);margin-top:4px;">⚠️ Conta offline — só você pode ver. Postar vídeos em breve (apenas bots postam por enquanto).</p>
+      <p id="regErr" style="font-size:.75rem;color:var(--red);display:none;margin-top:4px;"></p>
+
+      <p style="font-size:.72rem;color:var(--t3);margin-top:6px;">⚠️ O @ não pode ser mudado depois de criado.</p>
 
     </div>
 
@@ -1313,7 +1323,7 @@ h1 .grad{background:linear-gradient(135deg,var(--blue),#6090ff);-webkit-backgrou
 
       <button class="btn-out" onclick="closeModal('regModal')">Cancelar</button>
 
-      <button class="btn-main" onclick="createAccount()">Criar canal →</button>
+      <button class="btn-main" id="regBtn" onclick="createAccount()">Criar conta →</button>
 
     </div>
 
@@ -2824,29 +2834,64 @@ function prevAvatar(inp,prevId){if(!inp.files[0])return;const r=new FileReader()
 
 
 
+function updateEmailPreview(){
+  const v=document.getElementById('regEmail').value.trim();
+  const prev=document.getElementById('emailPreview');
+  prev.textContent=v?v+'@capdrawn.com':'';
+}
+
 function createAccount(){
 
   const name=document.getElementById('regName').value.trim();
-
   const handle=document.getElementById('regHandle').value.trim().replace(/[^a-z0-9_]/gi,'').toLowerCase();
-
+  const emailRaw=document.getElementById('regEmail').value.trim();
+  const password=document.getElementById('regPass').value;
   const desc=document.getElementById('regDesc').value.trim();
+  const errEl=document.getElementById('regErr');
+  errEl.style.display='none';
 
-  if(!name||!handle){toast('⚠️ Preencha nome e @usuário!');return;}
+  if(!name||!handle){errEl.textContent='⚠️ Preencha nome e @usuário!';errEl.style.display='block';return;}
+  if(!emailRaw){errEl.textContent='⚠️ Preencha o email!';errEl.style.display='block';return;}
+  if(!password||password.length<6){errEl.textContent='⚠️ Senha deve ter ao menos 6 caracteres!';errEl.style.display='block';return;}
 
-  if(USERS[handle]){toast('⚠️ @ já está em uso!');return;}
+  const btn=document.getElementById('regBtn');
+  btn.disabled=true; btn.textContent='Criando...';
 
-  const color=document.getElementById('regAvPrev').style.background||'#0052e0';
-
-  const joined=new Date().toLocaleDateString('pt-BR',{month:'short',year:'numeric'});
-
-  USERS[handle]={name,handle,desc,area:regSelBadge,color,avatar:regAvUrl,joined,followers:0,videos:[],vip:false,verified:false,official:false,isBot:false};
-
-  regAvUrl=null;regSelBadge=null;
-
-  closeModal('regModal');
-
-  loginUser(handle);
+  fetch('/api/auth/register',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name,handle,email:emailRaw,password})
+  })
+  .then(r=>r.json())
+  .then(data=>{
+    btn.disabled=false; btn.textContent='Criar conta →';
+    if(!data.ok){
+      errEl.textContent='❌ '+data.error;
+      errEl.style.display='block';
+      return;
+    }
+    // Login automático após criar
+    APP.token=data.token;
+    const u=data.user;
+    APP.me={
+      handle:u.handle, name:u.name, avatar:u.avatarUrl||null,
+      email:u.email, vip:u.isVip, verified:u.isVerified,
+      desc, area:regSelBadge, color:document.getElementById('regAvPrev').style.background||'#0052e0',
+      isBot:false, videos:[]
+    };
+    USERS[u.handle]=APP.me;
+    localStorage.setItem('cdToken', data.token);
+    localStorage.setItem('cdLoggedIn', u.handle);
+    saveUserLocal(APP.me);
+    regAvUrl=null; regSelBadge=null;
+    closeModal('regModal');
+    loginUser(u.handle);
+    toast('🎉 Conta criada! Bem-vindo, '+u.name+'!');
+  })
+  .catch(()=>{
+    btn.disabled=false; btn.textContent='Criar conta →';
+    toast('❌ Erro de conexão');
+  });
 
 }
 
@@ -2856,11 +2901,49 @@ function openRegister(){closeModal('loginModal');openModal('regModal');}
 
 function doLogin(){
 
-  const h=document.getElementById('liHandle').value.trim().toLowerCase();
+  const emailRaw=document.getElementById('liEmail').value.trim();
+  const password=document.getElementById('liPass').value;
+  const errEl=document.getElementById('loginErr');
+  errEl.style.display='none';
 
-  if(!USERS[h]){toast('⚠️ Usuário não encontrado. Crie uma conta!');return;}
+  if(!emailRaw||!password){toast('⚠️ Preencha email e senha');return;}
 
-  closeModal('loginModal');loginUser(h);
+  const btn=document.getElementById('loginBtn');
+  btn.disabled=true; btn.textContent='Entrando...';
+
+  fetch('/api/auth/login',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({email:emailRaw,password})
+  })
+  .then(r=>r.json())
+  .then(data=>{
+    btn.disabled=false; btn.textContent='Entrar →';
+    if(!data.ok){
+      errEl.textContent='❌ '+data.error;
+      errEl.style.display='block';
+      return;
+    }
+    // Salva sessão no localStorage
+    APP.token=data.token;
+    const u=data.user;
+    APP.me={
+      handle:u.handle, name:u.name, avatar:u.avatarUrl||null,
+      email:u.email, vip:u.isVip, verified:u.isVerified,
+      isBot:false, videos:[], color:'#0052e0'
+    };
+    USERS[u.handle]=APP.me;
+    localStorage.setItem('cdToken', data.token);
+    localStorage.setItem('cdLoggedIn', u.handle);
+    saveUserLocal(APP.me);
+    closeModal('loginModal');
+    loginUser(u.handle);
+    toast('✅ Bem-vindo, '+u.name+'!');
+  })
+  .catch(()=>{
+    btn.disabled=false; btn.textContent='Entrar →';
+    toast('❌ Erro de conexão');
+  });
 
 }
 
@@ -3182,7 +3265,7 @@ async function submitVideo(){
     fd.append('distributed', String(distributed));
     fd.append('uploaderId', APP.me.handle);
 
-    const res=await fetch('/api/videos/upload',{method:'POST',body:fd});
+    const res=await fetch('/api/videos/upload',{method:'POST',headers:APP.token?{'Authorization':'Bearer '+APP.token}:{},body:fd});
     const data=await res.json();
     if(!data.ok) throw new Error(data.error||'Erro no servidor');
 
@@ -3499,9 +3582,34 @@ async function loadPersistedData(){
         }
       }
     }catch(e){}
-    // Auto-login
+    // Auto-login via token JWT salvo
+    const savedToken=localStorage.getItem('cdToken');
     const loggedIn=localStorage.getItem('cdLoggedIn');
-    if(loggedIn&&USERS[loggedIn]&&!USERS[loggedIn].isBot)loginUser(loggedIn);
+    if(savedToken&&loggedIn){
+      // Verifica token com o servidor
+      fetch('/api/auth/me',{headers:{'Authorization':'Bearer '+savedToken}})
+      .then(r=>r.json())
+      .then(data=>{
+        if(data.ok&&data.user){
+          APP.token=savedToken;
+          const u=data.user;
+          APP.me={
+            handle:u.handle, name:u.name, avatar:u.avatarUrl||null,
+            email:u.email, vip:u.isVip, verified:u.isVerified,
+            isBot:false, videos:[], color:'#0052e0'
+          };
+          USERS[u.handle]=APP.me;
+          loginUser(u.handle);
+        } else {
+          localStorage.removeItem('cdToken');
+          localStorage.removeItem('cdLoggedIn');
+        }
+      })
+      .catch(()=>{
+        // Offline fallback: usa dados locais
+        if(USERS[loggedIn]&&!USERS[loggedIn].isBot)loginUser(loggedIn);
+      });
+    }
   }catch(e){console.warn('loadPersistedData:',e);}
 }
 
