@@ -1982,17 +1982,30 @@ async function loadFeedItems(container, count){
       const data = await res.json();
       if(data.videos && data.videos.length){
         data.videos.forEach(v=>{
+          const uHandle=v.uploader?.handle||'usuario';
+          const uName=v.uploader?.name||uHandle;
+          const uAvatar=v.uploader?.avatarUrl||null;
+          if(!USERS[uHandle]){
+            USERS[uHandle]={handle:uHandle,name:uName,avatar:uAvatar,color:'#0052e0',isBot:false,videos:[]};
+          } else {
+            if(uAvatar) USERS[uHandle].avatar=uAvatar;
+            USERS[uHandle].name=uName;
+          }
           if(!COMMUNITY_VIDEOS.find(c=>c.dbId===v.id)){
             COMMUNITY_VIDEOS.push({
               id: nextCommunityVidId++,
               dbId: v.id,
               blobUrl: v.url,
               caption: v.caption || '🎥 Vídeo da comunidade',
-              uploaderHandle: v.uploader?.handle || 'usuario',
+              uploaderHandle: uHandle,
               distributed: v.distributed,
               removed: false,
               time: 'recente',
             });
+          }
+          if(!USERS[uHandle].videos) USERS[uHandle].videos=[];
+          if(!USERS[uHandle].videos.find(x=>x.dbId===v.id)){
+            USERS[uHandle].videos.unshift({blobUrl:v.url,caption:v.caption,views:0,dbId:v.id});
           }
         });
       }
@@ -3635,18 +3648,34 @@ async function loadPersistedData(){
         const data=await res.json();
         if(data.videos&&data.videos.length){
           data.videos.forEach(v=>{
+            const uploaderHandle=v.uploader?.handle||'usuario';
+            const uploaderName=v.uploader?.name||uploaderHandle;
+            const uploaderAvatar=v.uploader?.avatarUrl||null;
+
+            // Sempre registra o uploader no USERS com avatar real do servidor
+            if(!USERS[uploaderHandle]){
+              USERS[uploaderHandle]={
+                handle:uploaderHandle, name:uploaderName,
+                avatar:uploaderAvatar, color:'#0052e0',
+                isBot:false, videos:[],
+              };
+            } else {
+              if(uploaderAvatar) USERS[uploaderHandle].avatar=uploaderAvatar;
+              USERS[uploaderHandle].name=uploaderName;
+            }
+
             if(!COMMUNITY_VIDEOS.find(c=>c.dbId===v.id)){
               COMMUNITY_VIDEOS.push({
                 id:nextCommunityVidId++,dbId:v.id,
                 blobUrl:v.url,caption:v.caption||'🎥 Vídeo da comunidade',
-                uploaderHandle:v.uploader?.handle||'usuario',
-                distributed:v.distributed,removed:false,time:'recente',
+                uploaderHandle,distributed:v.distributed,removed:false,time:'recente',
               });
-              // Adiciona ao perfil do uploader se ele existir localmente
-              if(USERS[v.uploader?.handle]&&!USERS[v.uploader.handle].videos?.find(x=>x.dbId===v.id)){
-                if(!USERS[v.uploader.handle].videos)USERS[v.uploader.handle].videos=[];
-                USERS[v.uploader.handle].videos.unshift({blobUrl:v.url,caption:v.caption,views:v.views||0,dbId:v.id});
-              }
+            }
+
+            // Adiciona vídeo ao perfil do uploader
+            if(!USERS[uploaderHandle].videos) USERS[uploaderHandle].videos=[];
+            if(!USERS[uploaderHandle].videos.find(x=>x.dbId===v.id)){
+              USERS[uploaderHandle].videos.unshift({blobUrl:v.url,caption:v.caption,views:v.views||0,dbId:v.id});
             }
           });
           saveVideosLocal();
