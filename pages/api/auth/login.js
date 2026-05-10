@@ -15,11 +15,16 @@ export default async function handler(req, res) {
   if (!process.env.JWT_SECRET)
     return res.status(500).json({ error: 'Configuração do servidor incompleta' })
 
+  // aceita "joao" ou "joao@capdrawn.com"
   const fullEmail = email.includes('@') ? email : `${email}@capdrawn.com`
 
   try {
     const user = await prisma.user.findUnique({ where: { email: fullEmail } })
     if (!user) return res.status(401).json({ error: 'Usuário não encontrado' })
+
+    // Bloqueia contas offline (criadas automaticamente pelo sistema antigo)
+    if (user.password === 'offline_user')
+      return res.status(401).json({ error: 'Esta conta não tem senha definida. Crie uma conta completa.' })
 
     const ok = await bcrypt.compare(password, user.password)
     if (!ok) return res.status(401).json({ error: 'Senha incorreta' })
@@ -34,12 +39,12 @@ export default async function handler(req, res) {
       ok: true,
       token,
       user: {
-        id:       user.id,
-        name:     user.name,
-        handle:   user.handle,
-        email:    user.email,
-        avatarUrl: user.avatarUrl,
-        isVip:    user.isVip,
+        id:         user.id,
+        name:       user.name,
+        handle:     user.handle,
+        email:      user.email,
+        avatarUrl:  user.avatarUrl,
+        isVip:      user.isVip,
         isVerified: user.isVerified,
       }
     })
