@@ -1361,6 +1361,8 @@ h1 .grad{background:linear-gradient(135deg,var(--blue),#6090ff);-webkit-backgrou
 
       <div class="frow"><label>Descrição</label><textarea class="finp" id="editDesc" style="min-height:60px;resize:none;"></textarea></div>
 
+      <div class="frow"><label>Link (site, YouTube, etc.)</label><input class="finp" id="editLink" placeholder="https://..." type="url"/></div>
+
     </div>
 
     <div class="modal-foot">
@@ -2114,9 +2116,9 @@ function buildVidHTML(bot, vidObj, emoji){
         <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="white" stroke-width="2"><path d="M4 5h20v14H17l-5 5v-5H4V5z" stroke-linejoin="round"/></svg>
         <span class="vid-act-count" id="vcmtCount${vidObj.id}">${vidObj.comments.length}</span>
       </button>
-      <button class="vid-act-btn" onclick="shareVid(${vidObj.id})">
+      <button class="vid-act-btn" onclick="shareVid(${vidObj.id},'${vidObj.dbId||''}')">
         <svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="white" stroke-width="2"><circle cx="20" cy="5" r="3"/><circle cx="6" cy="13" r="3"/><circle cx="20" cy="21" r="3"/><path d="M8.5 11.5l9-5M8.5 14.5l9 5"/></svg>
-        <span class="vid-act-count">Compartilhar</span>
+        <span class="vid-act-count">Copiar link</span>
       </button>
     </div>`;
 }
@@ -2192,9 +2194,25 @@ function likeVid(id,btn){
   if(cnt)cnt.textContent=formatNum(v.likes);
 }
 
-function shareVid(id){
-  if(navigator.share){navigator.share({title:'Vídeo no CapDrawn',url:window.location.href}).catch(()=>{});}
-  else{toast('🔗 Link copiado!');}
+function shareVid(id, dbId){
+  const v=MEME_VIDEOS.find(x=>x.id===id);
+  const videoUrl = v?.blobUrl || window.location.href;
+  const shareUrl = dbId ? `${window.location.origin}/?v=${dbId}` : window.location.href;
+
+  if(navigator.share){
+    navigator.share({title:'Vídeo no CapDrawn',url:shareUrl}).catch(()=>{});
+  } else if(navigator.clipboard){
+    navigator.clipboard.writeText(shareUrl).then(()=>toast('🔗 Link copiado!'));
+  } else {
+    // Fallback para navegadores antigos
+    const el=document.createElement('textarea');
+    el.value=shareUrl;
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand('copy');
+    document.body.removeChild(el);
+    toast('🔗 Link copiado!');
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -2288,7 +2306,12 @@ function hideVcMentDrop(){document.getElementById('vcMentDrop').classList.remove
 // MENTIONS PARSER
 // ═══════════════════════════════════════════════════════
 function parseMentions(text){
-  return text.replace(/@([a-zA-Z0-9_.]+)/g,(match,handle)=>{
+  // Primeiro converte URLs em links
+  const withLinks = text.replace(/(https?:\/\/[^\s<>"']+)/g,
+    url=>`<a href="${url}" target="_blank" rel="noopener noreferrer" style="color:var(--blue);font-weight:600;word-break:break-all;" onclick="event.stopPropagation()">${url}</a>`
+  );
+  // Depois converte @menções
+  return withLinks.replace(/@([a-zA-Z0-9_.]+)/g,(match,handle)=>{
     const u=USERS[handle]||USERS[handle.toLowerCase()];
     if(u)return`<span class="mention" onclick="openProfileFromComments('${u.handle}')">${match}</span>`;
     return`<span class="mention" onclick="toast('Usuário @${handle} não encontrado')">${match}</span>`;
@@ -2396,6 +2419,13 @@ function sendComment(){
 
   renderComments();
 
+  // Salva no banco de dados
+  fetch('/api/comments',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({handle:APP.me.handle, text, videoId:null})
+  }).catch(()=>{});
+
   // random bot replies
 
   if(Math.random() < 0.5){
@@ -2490,9 +2520,33 @@ function openProfile(handle){
 
   if(!handle) return;
 
-  // Busca dados atualizados do servidor se for usuário real
+  // Se usuário não está local, busca do servidor antes de abrir
+  if(!USERS[handle]){
+    fetch(`/api/users/${handle}`)
+      .then(r=>r.ok?r.json():null)
+      .then(data=>{
+        if(data?.ok && data.user){
+          const u=data.user;
+          USERS[handle]={
+            handle:u.handle, name:u.name,
+            avatar:u.avatarUrl||null,
+            desc:u.bio||'', bio:u.bio||'',
+            color:'#0052e0', isBot:false,
+            videos:(u.videos||[]).map(v=>({blobUrl:v.url,caption:v.caption,views:v.views||0,dbId:v.id})),
+          };
+          _renderProfile(handle);
+          document.getElementById('profilePage').style.display='block';
+          document.getElementById('profilePage').scrollTop=0;
+          document.body.style.overflow='hidden';
+        } else {
+          toast('Usuário não encontrado.');
+        }
+      })
+      .catch(()=>toast('Erro ao carregar perfil.'));
+    return;
+  }
+
   const uLocal = USERS[handle];
-  if(!uLocal){toast('Usuário não encontrado.');return;}
 
   viewingHandle = handle;
 
@@ -2668,9 +2722,10 @@ function _renderProfile(handle){
 
   const snippet = document.getElementById('profDescSnippet');
 
-  if(u.desc&&u.desc.trim()){
+  const descVal = u.desc||u.bio||'';
+  if(descVal&&descVal.trim()){
 
-    const short = u.desc.length>90 ? u.desc.slice(0,90)+'…' : u.desc.split('\n')[0];
+    const short = descVal.length>90 ? descVal.slice(0,90)+'…' : descVal.split('\n')[0];
 
     snippet.innerHTML = `<span>${short}</span> <span class="read-more" onclick="switchPTab('desc',document.querySelectorAll('.ptab')[2])">Ler mais</span>`;
 
@@ -2692,9 +2747,10 @@ function _renderProfile(handle){
 
   // Desc full
 
-  document.getElementById('profDescFull').textContent = u.desc||'';
+  const descText = u.desc||u.bio||'';
+  document.getElementById('profDescFull').textContent = descText;
 
-  document.getElementById('profDescSection').style.display = u.desc ? 'block' : 'none';
+  document.getElementById('profDescSection').style.display = descText ? 'block' : 'none';
 
   document.getElementById('profDescMeta').innerHTML = `
 
@@ -2703,6 +2759,8 @@ function _renderProfile(handle){
     ${u.viewsFmt?`<div class="desc-info-row"><span class="desc-info-icon">👁</span><span>${u.viewsFmt}</span></div>`:''}
 
     ${u.isBot?`<div class="desc-info-row"><span class="desc-info-icon">🤖</span><span>Canal da Rede Memes</span></div>`:''}
+
+    ${u.link?`<div class="desc-info-row"><span class="desc-info-icon">🔗</span><a href="${u.link}" target="_blank" rel="noopener noreferrer" style="color:var(--blue);font-weight:600;word-break:break-all;">${u.link}</a></div>`:''}
 
   `;
 
@@ -2833,15 +2891,19 @@ function renderProfVideos(u, isMe){
 
     noVids.style.display = 'none';
 
-    grid.innerHTML = u.videos.map(v=>`
+    grid.innerHTML = u.videos.map((v,i)=>`
 
-      <div class="prof-vid-thumb">
+      <div class="prof-vid-thumb" id="profvid_${v.dbId||i}">
 
-        <video src="${v.blobUrl}" muted preload="metadata" style="width:100%;height:100%;object-fit:cover;" onloadedmetadata="this.currentTime=0.5"></video>
+        <video src="${v.blobUrl}" muted preload="metadata" style="width:100%;height:100%;object-fit:cover;" onloadedmetadata="this.currentTime=0.5" onclick="shareVid(0,'${v.dbId||''}')"></video>
 
-        <div class="thumb-overlay"><span class="thumb-play">▶</span></div>
+        <div class="thumb-overlay" onclick="shareVid(0,'${v.dbId||''}')"><span class="thumb-play">▶</span></div>
 
         <div class="thumb-views">👁 ${formatNum(v.views||0)}</div>
+
+        ${isMe&&v.dbId?`<button onclick="deleteVideo('${v.dbId}','profvid_${v.dbId}')" style="position:absolute;top:5px;right:5px;background:rgba(240,48,80,.85);border:none;border-radius:6px;color:#fff;font-size:.65rem;font-weight:700;padding:3px 7px;cursor:pointer;z-index:5;">🗑</button>`:''}
+
+        ${v.dbId?`<button onclick="copyVidLink('${v.dbId}')" style="position:absolute;top:5px;left:5px;background:rgba(0,0,0,.55);border:none;border-radius:6px;color:#fff;font-size:.65rem;font-weight:700;padding:3px 7px;cursor:pointer;z-index:5;">🔗</button>`:''}
 
       </div>`).join('');
 
@@ -2850,6 +2912,46 @@ function renderProfVideos(u, isMe){
 }
 
 
+
+async function deleteVideo(dbId, elemId){
+  if(!APP.me) return;
+  if(!confirm('Excluir este vídeo? Essa ação não pode ser desfeita.')) return;
+
+  try{
+    const res = await fetch(`/api/videos/${dbId}`,{
+      method:'DELETE',
+      headers:{'Authorization':'Bearer '+APP.token}
+    });
+    const data = await res.json();
+    if(data.ok){
+      // Remove do DOM
+      const el = document.getElementById(elemId);
+      if(el) el.remove();
+      // Remove do array local
+      if(APP.me.videos) APP.me.videos = APP.me.videos.filter(v=>v.dbId!==dbId);
+      // Remove do feed
+      COMMUNITY_VIDEOS.forEach(v=>{ if(v.dbId===dbId) v.removed=true; });
+      toast('🗑 Vídeo excluído!');
+    } else {
+      toast('❌ Erro ao excluir: '+(data.error||'tente novamente'));
+    }
+  }catch(e){
+    toast('❌ Erro de conexão');
+  }
+}
+
+function copyVidLink(dbId){
+  const url = `${window.location.origin}/?v=${dbId}`;
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(url).then(()=>toast('🔗 Link copiado!'));
+  } else {
+    const el=document.createElement('textarea');
+    el.value=url; document.body.appendChild(el);
+    el.select(); document.execCommand('copy');
+    document.body.removeChild(el);
+    toast('🔗 Link copiado!');
+  }
+}
 
 function renderProfEmblems(u){
 
@@ -3086,7 +3188,9 @@ function openProfileModal(){
 
   document.getElementById('editName').value=u.name;
 
-  document.getElementById('editDesc').value=u.desc||'';
+  document.getElementById('editDesc').value=u.desc||u.bio||'';
+
+  document.getElementById('editLink').value=u.link||'';
 
   const p=document.getElementById('editAvPrev');
 
@@ -3108,10 +3212,11 @@ async function saveProfile(){
 
   u.name=document.getElementById('editName').value.trim()||u.name;
   u.desc=document.getElementById('editDesc').value.trim();
+  u.link=document.getElementById('editLink').value.trim();
 
   try{
     // Envia avatar + dados pro servidor
-    const body={name:u.name,bio:u.desc};
+    const body={name:u.name,bio:u.desc,link:u.link||''};
     if(editAvUrl) body.avatarBase64=editAvUrl;
 
     const res=await fetch('/api/auth/avatar',{
@@ -3125,9 +3230,10 @@ async function saveProfile(){
     const data=await res.json();
 
     if(data.ok && data.user){
-      // Atualiza com URL real do Cloudinary
+      // Atualiza com dados reais do servidor
       u.avatar=data.user.avatarUrl||u.avatar;
       u.name=data.user.name||u.name;
+      u.desc=data.user.bio||u.desc;
     }
   }catch(e){
     console.warn('saveProfile server error:',e);
