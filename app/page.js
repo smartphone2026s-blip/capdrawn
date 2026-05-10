@@ -1817,7 +1817,7 @@ function initBots(){
 
   BOT_NAMES.forEach((name,i)=>{
 
-    const handle = BOT_HANDLES[i] || `bot_\${i}`;
+    const handle = BOT_HANDLES[i] || `bot_${i}`;
 
     const ci = i % 8;
 
@@ -1895,12 +1895,12 @@ function buildPreviewCards(){
     card.onclick = () => openProfile(handle);
     const emoji = rand(MEME_EMOJIS);
     card.innerHTML = `
-      <div class="preview-card-bg">\${emoji}</div>
+      <div class="preview-card-bg">${emoji}</div>
       <div class="preview-card-overlay"></div>
       <div class="preview-card-play"><svg width="16" height="16" viewBox="0 0 16 16" fill="white"><path d="M5 3l9 5-9 5V3z"/></svg></div>
       <div class="preview-card-info">
-        <div class="preview-card-name">\${u.name}</div>
-        <div class="preview-card-views">\${u.followersFmt} seguidores</div>
+        <div class="preview-card-name">${u.name}</div>
+        <div class="preview-card-views">${u.followersFmt} seguidores</div>
       </div>`;
     const gradMap={'av-1':'#1d4ed8','av-2':'#7c3aed','av-3':'#0f766e','av-4':'#b45309','av-5':'#be123c','av-6':'#1e3a5f','av-7':'#166534','av-8':'#374151'};
     card.style.background = gradMap[u.avClass] || '#111';
@@ -1953,7 +1953,7 @@ function buildCommunityCard(container){
     likedBy: [],
     comments: buildBotComments(bot),
     views: randInt(1000,500000),
-    time: `\${randInt(1,59)}m atrás`,
+    time: `${randInt(1,59)}m atrás`,
     caption: rand(['💀 Sem contexto nenhum', '👁 O que eu acabei de assistir', '🔥 Feed infinito ativo', '🤡 Clássico demais', '😈 Prepare o espírito']),
     removed: false,
   };
@@ -1988,40 +1988,40 @@ function buildVidHTML(bot, vidObj, emoji){
   const isVip = bot.vip, isVer = bot.verified;
 
   const mediaHTML = vidObj.blobUrl
-    ? `<video src="\${vidObj.blobUrl}" autoplay loop muted playsinline preload="auto" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0;" id="vidEl\${vidObj.id}"></video>`
-    : `<div style="position:absolute;inset:0;background:linear-gradient(160deg,#1a1a2e,#16213e,#0f3460);display:flex;align-items:center;justify-content:center;font-size:8rem;">\${emoji}</div>`;
+    ? `<video src="${vidObj.blobUrl}" autoplay loop muted playsinline preload="auto" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0;" id="vidEl${vidObj.id}"></video>`
+    : `<div style="position:absolute;inset:0;background:linear-gradient(160deg,#1a1a2e,#16213e,#0f3460);display:flex;align-items:center;justify-content:center;font-size:8rem;">${emoji}</div>`;
 
   return `
-    \${mediaHTML}
+    ${mediaHTML}
     <div class="vid-overlay"></div>
-    <button class="vid-report-btn" onclick="openReportModal(\${vidObj.id})">⚑ Denunciar</button>
-    <div class="vid-pause-icon" id="pauseIcon\${vidObj.id}">
+    <button class="vid-report-btn" onclick="openReportModal(${vidObj.id})">⚑ Denunciar</button>
+    <div class="vid-pause-icon" id="pauseIcon${vidObj.id}">
       <svg width="28" height="28" viewBox="0 0 28 28" fill="white"><rect x="6" y="5" width="5" height="18" rx="2"/><rect x="17" y="5" width="5" height="18" rx="2"/></svg>
     </div>
     <div class="vid-info">
-      <div class="vid-author" onclick="openProfileFromFeed('\${authorHandle}')">
-        <div class="vid-av \${bot.avClass}">\${avLetter}</div>
+      <div class="vid-author" onclick="openProfileFromFeed('${authorHandle}')">
+        <div class="vid-av ${bot.avClass}">${avLetter}</div>
         <div>
           <div style="display:flex;align-items:center;gap:5px;">
-            <span class="vid-author-name">\${authorName}</span>
-            \${isVip?'<span style="font-size:.55rem;padding:1px 4px;background:rgba(240,192,64,.25);border:1px solid rgba(240,192,64,.5);border-radius:4px;color:#f0c040;font-weight:700;">⭐</span>':''}
-            \${isVer?'<span style="display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;background:#0052e0;clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%);"><svg width="8" height="8" viewBox="0 0 24 24" fill="white"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></span>':''}
+            <span class="vid-author-name">${authorName}</span>
+            ${isVip?'<span style="font-size:.55rem;padding:1px 4px;background:rgba(240,192,64,.25);border:1px solid rgba(240,192,64,.5);border-radius:4px;color:#f0c040;font-weight:700;">⭐</span>':''}
+            ${isVer?'<span style="display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;background:#0052e0;clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%);"><svg width="8" height="8" viewBox="0 0 24 24" fill="white"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></span>':''}
           </div>
-          <div class="vid-author-handle">@\${authorHandle}</div>
+          <div class="vid-author-handle">@${authorHandle}</div>
         </div>
       </div>
-      <div class="vid-caption">\${vidObj.caption}</div>
+      <div class="vid-caption">${vidObj.caption}</div>
     </div>
     <div class="vid-side-actions">
-      <button class="vid-heart-btn" id="vheart\${vidObj.id}" onclick="likeVid(\${vidObj.id},this)">
+      <button class="vid-heart-btn" id="vheart${vidObj.id}" onclick="likeVid(${vidObj.id},this)">
         <svg width="32" height="32" viewBox="0 0 32 32" fill="none" stroke="white" stroke-width="2"><path d="M16 27S4 19 4 11a6 6 0 0112-1.2A6 6 0 0128 11c0 8-12 16-12 16z"/></svg>
-        <span class="vid-act-count" id="vlikeCount\${vidObj.id}">\${likesFmt}</span>
+        <span class="vid-act-count" id="vlikeCount${vidObj.id}">${likesFmt}</span>
       </button>
-      <button class="vid-act-btn" onclick="openVidComments(\${vidObj.id})">
+      <button class="vid-act-btn" onclick="openVidComments(${vidObj.id})">
         <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="white" stroke-width="2"><path d="M4 5h20v14H17l-5 5v-5H4V5z" stroke-linejoin="round"/></svg>
-        <span class="vid-act-count" id="vcmtCount\${vidObj.id}">\${vidObj.comments.length}</span>
+        <span class="vid-act-count" id="vcmtCount${vidObj.id}">${vidObj.comments.length}</span>
       </button>
-      <button class="vid-act-btn" onclick="shareVid(\${vidObj.id})">
+      <button class="vid-act-btn" onclick="shareVid(${vidObj.id})">
         <svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="white" stroke-width="2"><circle cx="20" cy="5" r="3"/><circle cx="6" cy="13" r="3"/><circle cx="20" cy="21" r="3"/><path d="M8.5 11.5l9-5M8.5 14.5l9 5"/></svg>
         <span class="vid-act-count">Compartilhar</span>
       </button>
@@ -2034,7 +2034,7 @@ function buildBotComments(primaryBot){
   const count=randInt(3,10);
   for(let i=0;i<count;i++){
     const cb=USERS[rand(botKeys)];
-    cmts.push({handle:cb.handle,name:cb.name,text:rand(BOT_COMMENTS_POOL),time:`\${randInt(1,120)}m atrás`,isBot:true,verified:cb.verified,vip:cb.vip});
+    cmts.push({handle:cb.handle,name:cb.name,text:rand(BOT_COMMENTS_POOL),time:`${randInt(1,120)}m atrás`,isBot:true,verified:cb.verified,vip:cb.vip});
   }
   return cmts;
 }
@@ -2111,10 +2111,10 @@ function openVidComments(id){
   currentVidForComments=id;
   const v=MEME_VIDEOS.find(x=>x.id===id);
   if(!v)return;
-  document.getElementById('vcModalTitle').textContent=`Comentários (\${v.comments.length})`;
+  document.getElementById('vcModalTitle').textContent=`Comentários (${v.comments.length})`;
   renderVidComments(v);
   const av=document.getElementById('vcCompAv');
-  if(APP.me){av.style.background=APP.me.color||'var(--blue)';av.textContent=APP.me.name.charAt(0).toUpperCase();if(APP.me.avatar)av.innerHTML=`<img src="\${APP.me.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"/>`;}
+  if(APP.me){av.style.background=APP.me.color||'var(--blue)';av.textContent=APP.me.name.charAt(0).toUpperCase();if(APP.me.avatar)av.innerHTML=`<img src="${APP.me.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"/>`;}
   openModal('videoCommentsModal');
 }
 
@@ -2123,20 +2123,20 @@ function renderVidComments(v){
   if(!v.comments.length){list.innerHTML=`<div style="text-align:center;padding:24px 0;color:var(--t3);font-size:.84rem;">Seja o primeiro a comentar!</div>`;return;}
   list.innerHTML=v.comments.map(c=>{
     const u=USERS[c.handle];
-    const avStyle=u?(u.isBot?'':(`background:\${u.color||'#888'}`)): 'background:#888';
+    const avStyle=u?(u.isBot?'':(`background:${u.color||'#888'}`)): 'background:#888';
     const avClass=u?.avClass||'';
-    const avContent=u?.avatar?`<img src="\${u.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"/>`:((u?.name||c.name||c.handle).charAt(0).toUpperCase());
+    const avContent=u?.avatar?`<img src="${u.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"/>`:((u?.name||c.name||c.handle).charAt(0).toUpperCase());
     const verBadge=(c.verified||u?.verified)?`<span style="display:inline-flex;align-items:center;justify-content:center;width:12px;height:12px;background:var(--blue);clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%);margin-left:2px;flex-shrink:0;"><svg width="7" height="7" viewBox="0 0 24 24" fill="white"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></span>`:'';
     const vipBadge=(c.vip||u?.vip)?`<span style="font-size:.55rem;padding:1px 4px;background:var(--vip-lt);border:1px solid var(--vip-bd);border-radius:3px;color:var(--vip);font-weight:700;">⭐</span>`:'';
     const parsedText=parseMentions(c.text);
     return `<div class="vcmt">
-      <div class="vcmt-av \${avClass}" style="\${avStyle}" onclick="openProfileFromComments('\${c.handle}')">\${avContent}</div>
+      <div class="vcmt-av ${avClass}" style="${avStyle}" onclick="openProfileFromComments('${c.handle}')">${avContent}</div>
       <div style="flex:1;min-width:0;">
         <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
-          <span class="vcmt-name" onclick="openProfileFromComments('\${c.handle}')">\${c.name||u?.name||c.handle}</span>\${verBadge}\${vipBadge}
-          <span class="vcmt-time">\${c.time}</span>
+          <span class="vcmt-name" onclick="openProfileFromComments('${c.handle}')">${c.name||u?.name||c.handle}</span>${verBadge}${vipBadge}
+          <span class="vcmt-time">${c.time}</span>
         </div>
-        <div class="vcmt-text">\${parsedText}</div>
+        <div class="vcmt-text">${parsedText}</div>
       </div>
     </div>`;
   }).join('');
@@ -2153,16 +2153,16 @@ function sendVidComment(){
   v.comments.push({handle:APP.me.handle,name:APP.me.name,text,time:'agora',verified:APP.me.verified||false,vip:APP.me.vip||false});
   document.getElementById('vcInput').value='';
   hideVcMentDrop();
-  document.getElementById('vcModalTitle').textContent=`Comentários (\${v.comments.length})`;
+  document.getElementById('vcModalTitle').textContent=`Comentários (${v.comments.length})`;
   renderVidComments(v);
   const cnt=document.getElementById('vcmtCount'+v.id);
   if(cnt)cnt.textContent=v.comments.length;
   if(Math.random()<0.4){
     setTimeout(()=>{
       const rb=getRandomBot();
-      v.comments.push({handle:rb.handle,name:rb.name,text:`@\${APP.me.handle} \${rand(BOT_COMMENTS_POOL)}`,time:'agora',verified:rb.verified,vip:rb.vip,isBot:true});
+      v.comments.push({handle:rb.handle,name:rb.name,text:`@${APP.me.handle} ${rand(BOT_COMMENTS_POOL)}`,time:'agora',verified:rb.verified,vip:rb.vip,isBot:true});
       renderVidComments(v);
-      document.getElementById('vcModalTitle').textContent=`Comentários (\${v.comments.length})`;
+      document.getElementById('vcModalTitle').textContent=`Comentários (${v.comments.length})`;
       if(cnt)cnt.textContent=v.comments.length;
     },1500+Math.random()*2000);
   }
@@ -2176,7 +2176,7 @@ function onVcMentInput(el){
   const matches=Object.values(USERS).filter(u=>u.handle.startsWith(q)||u.name.toLowerCase().startsWith(q)).slice(0,5);
   if(!matches.length){hideVcMentDrop();return;}
   const drop=document.getElementById('vcMentDrop');
-  drop.innerHTML=matches.map(u=>`<div class="ment-item" onclick="complVcMent('\${u.handle}')"><div class="cav \${u.avClass||''}" style="width:28px;height:28px;\${u.isBot?'':('background:'+(u.color||'#888'))};">\${u.name.charAt(0).toUpperCase()}</div><div><strong style="font-size:.8rem;">\${u.name}</strong><div style="font-size:.68rem;color:var(--t3);">@\${u.handle}</div></div></div>`).join('');
+  drop.innerHTML=matches.map(u=>`<div class="ment-item" onclick="complVcMent('${u.handle}')"><div class="cav ${u.avClass||''}" style="width:28px;height:28px;${u.isBot?'':('background:'+(u.color||'#888'))};">${u.name.charAt(0).toUpperCase()}</div><div><strong style="font-size:.8rem;">${u.name}</strong><div style="font-size:.68rem;color:var(--t3);">@${u.handle}</div></div></div>`).join('');
   drop.classList.add('show');
 }
 function complVcMent(h){const inp=document.getElementById('vcInput'),v=inp.value,la=v.lastIndexOf('@');inp.value=v.slice(0,la+1)+h+' ';hideVcMentDrop();inp.focus();}
@@ -2188,8 +2188,8 @@ function hideVcMentDrop(){document.getElementById('vcMentDrop').classList.remove
 function parseMentions(text){
   return text.replace(/@([a-zA-Z0-9_.]+)/g,(match,handle)=>{
     const u=USERS[handle]||USERS[handle.toLowerCase()];
-    if(u)return`<span class="mention" onclick="openProfileFromComments('\${u.handle}')">\${match}</span>`;
-    return`<span class="mention" onclick="toast('Usuário @\${handle} não encontrado')">\${match}</span>`;
+    if(u)return`<span class="mention" onclick="openProfileFromComments('${u.handle}')">${match}</span>`;
+    return`<span class="mention" onclick="toast('Usuário @${handle} não encontrado')">${match}</span>`;
   });
 }
 // ═══════════════════════════════════════════════════════
@@ -2220,9 +2220,9 @@ function renderComments(){
 
     const avClass = u?.avClass||'';
 
-    const avStyle = u?.isBot ? '' : `background:\${u?.color||'#888'}`;
+    const avStyle = u?.isBot ? '' : `background:${u?.color||'#888'}`;
 
-    const avContent = u?.avatar ? `<img src="\${u.avatar}"/>` : (u?.name||c.handle).charAt(0).toUpperCase();
+    const avContent = u?.avatar ? `<img src="${u.avatar}"/>` : (u?.name||c.handle).charAt(0).toUpperCase();
 
     const verBadge = (u?.verified||u?.official) ? `<span class="ver-badge"><svg viewBox="0 0 24 24" width="8" height="8" fill="white"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></span>` : '';
 
@@ -2232,39 +2232,39 @@ function renderComments(){
 
     const liked = APP.me && c.likedBy?.includes(APP.me.handle);
 
-    return `<div class="comment\${c.pinned?' pinned':''}">
+    return `<div class="comment${c.pinned?' pinned':''}">
 
-      \${c.pinned?'<div class="pin-badge">📌 Fixado</div>':''}
+      ${c.pinned?'<div class="pin-badge">📌 Fixado</div>':''}
 
       <div class="cm-top">
 
-        <div class="cm-av \${avClass}" style="\${avStyle}" onclick="openProfile('\${c.handle}')">\${avContent}</div>
+        <div class="cm-av ${avClass}" style="${avStyle}" onclick="openProfile('${c.handle}')">${avContent}</div>
 
         <div style="flex:1;min-width:0;">
 
           <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
 
-            <span class="cm-name" onclick="openProfile('\${c.handle}')">\${u?.name||c.handle}</span>\${verBadge}\${vipBadge}
+            <span class="cm-name" onclick="openProfile('${c.handle}')">${u?.name||c.handle}</span>${verBadge}${vipBadge}
 
-            <span class="cm-time">\${c.time}</span>
+            <span class="cm-time">${c.time}</span>
 
           </div>
 
-          <div class="cm-handle">@\${c.handle}</div>
+          <div class="cm-handle">@${c.handle}</div>
 
         </div>
 
       </div>
 
-      <div class="cm-text">\${parsedText}</div>
+      <div class="cm-text">${parsedText}</div>
 
       <div class="cm-actions">
 
-        <div class="cm-like\${liked?' liked':''}" onclick="likeComment(\${c.id},this)">❤ \${c.likes||0}</div>
+        <div class="cm-like${liked?' liked':''}" onclick="likeComment(${c.id},this)">❤ ${c.likes||0}</div>
 
-        <div class="cm-reply" onclick="replyTo('\${c.handle}')">Responder</div>
+        <div class="cm-reply" onclick="replyTo('${c.handle}')">Responder</div>
 
-        \${isMe?`<div class="cm-del" onclick="delComment(\${c.id})">✕ Excluir</div>`:''}
+        ${isMe?`<div class="cm-del" onclick="delComment(${c.id})">✕ Excluir</div>`:''}
 
       </div>
 
@@ -2302,7 +2302,7 @@ function sendComment(){
 
       const replyBot = getRandomBot();
 
-      COMMENTS.unshift({id:nextId++, handle:replyBot.handle, text:`@\${APP.me.handle} \${rand(BOT_COMMENTS_POOL)}`, time:'agora', likes:randInt(0,20), likedBy:[], pinned:false, verified:replyBot.verified, vip:replyBot.vip});
+      COMMENTS.unshift({id:nextId++, handle:replyBot.handle, text:`@${APP.me.handle} ${rand(BOT_COMMENTS_POOL)}`, time:'agora', likes:randInt(0,20), likedBy:[], pinned:false, verified:replyBot.verified, vip:replyBot.vip});
 
       renderComments();
 
@@ -2338,7 +2338,7 @@ function likeComment(id, btn){
 
 function delComment(id){COMMENTS=COMMENTS.filter(x=>x.id!==id);renderComments();}
 
-function replyTo(h){const inp=document.getElementById('compInp');inp.value=`@\${h} `;inp.focus();document.getElementById('compose').scrollIntoView({behavior:'smooth'});}
+function replyTo(h){const inp=document.getElementById('compInp');inp.value=`@${h} `;inp.focus();document.getElementById('compose').scrollIntoView({behavior:'smooth'});}
 
 
 
@@ -2358,7 +2358,7 @@ function onCompInput(el){
 
   const drop=document.getElementById('mentDrop');
 
-  drop.innerHTML=matches.map(u=>`<div class="ment-item" onclick="complMent('\${u.handle}')"><div class="cav \${u.avClass||''}" style="width:28px;height:28px;\${u.isBot?'':('background:'+(u.color||'#888'))};">\${u.name.charAt(0).toUpperCase()}</div><div><strong style="font-size:.8rem;">\${u.name}</strong><div style="font-size:.68rem;color:var(--t3);">@\${u.handle}</div></div></div>`).join('');
+  drop.innerHTML=matches.map(u=>`<div class="ment-item" onclick="complMent('${u.handle}')"><div class="cav ${u.avClass||''}" style="width:28px;height:28px;${u.isBot?'':('background:'+(u.color||'#888'))};">${u.name.charAt(0).toUpperCase()}</div><div><strong style="font-size:.8rem;">${u.name}</strong><div style="font-size:.68rem;color:var(--t3);">@${u.handle}</div></div></div>`).join('');
 
   drop.classList.add('show');
 
@@ -2412,17 +2412,17 @@ function openProfile(handle){
 
     const cols = bnMap[u.bnClass] || '#dbeafe,#eff6ff';
 
-    cov.style.background = `linear-gradient(135deg,#\${cols.split(',')[0].replace('#','')},#\${cols.split(',')[1]?.replace('#','')})`;
+    cov.style.background = `linear-gradient(135deg,#${cols.split(',')[0].replace('#','')},#${cols.split(',')[1]?.replace('#','')})`;
 
     document.getElementById('profCoverInner').className = 'prof-cover-inner '+(u.bnClass||'bn-1');
 
   } else {
 
-    cov.style.background = `linear-gradient(160deg,\${u.color||'#0052e0'}44 0%,\${u.color||'#0052e0'}18 60%,var(--bg2) 100%)`;
+    cov.style.background = `linear-gradient(160deg,${u.color||'#0052e0'}44 0%,${u.color||'#0052e0'}18 60%,var(--bg2) 100%)`;
 
     document.getElementById('profCoverInner').className = 'prof-cover-inner';
 
-    document.getElementById('profCoverInner').style.background = `linear-gradient(160deg,\${u.color||'#0052e0'}44,transparent)`;
+    document.getElementById('profCoverInner').style.background = `linear-gradient(160deg,${u.color||'#0052e0'}44,transparent)`;
 
   }
 
@@ -2436,7 +2436,7 @@ function openProfile(handle){
 
     big.className = 'prof-av-big '+u.avClass;
 
-    big.innerHTML = `<span style="font-size:2rem;font-weight:800;color:#fff;">\${u.name.charAt(0).toUpperCase()}</span>`;
+    big.innerHTML = `<span style="font-size:2rem;font-weight:800;color:#fff;">${u.name.charAt(0).toUpperCase()}</span>`;
 
   } else {
 
@@ -2444,7 +2444,7 @@ function openProfile(handle){
 
     big.style.background = u.color||'#0052e0';
 
-    big.innerHTML = u.avatar ? `<img src="\${u.avatar}"/>` : `<span style="font-size:2rem;font-weight:800;color:#fff;">\${u.name.charAt(0).toUpperCase()}</span>`;
+    big.innerHTML = u.avatar ? `<img src="${u.avatar}"/>` : `<span style="font-size:2rem;font-weight:800;color:#fff;">${u.name.charAt(0).toUpperCase()}</span>`;
 
   }
 
@@ -2464,9 +2464,9 @@ function openProfile(handle){
 
     actions.innerHTML = `
 
-      <button class="prof-follow-btn\${subd?' following':''}" id="profFollowBtn" onclick="toggleSub()">
+      <button class="prof-follow-btn${subd?' following':''}" id="profFollowBtn" onclick="toggleSub()">
 
-        \${subd?'Seguindo':'Seguir'}
+        ${subd?'Seguindo':'Seguir'}
 
       </button>
 
@@ -2520,7 +2520,7 @@ function openProfile(handle){
 
   if(area){
 
-    badges.innerHTML = `<span class="badge-pill" style="background:\${(BADGE_COLORS[area]||{bg:'#eee'}).bg};color:\${(BADGE_COLORS[area]||{c:'#666'}).c};">\${BADGE_ICONS[area]||''} \${area}</span>`;
+    badges.innerHTML = `<span class="badge-pill" style="background:${(BADGE_COLORS[area]||{bg:'#eee'}).bg};color:${(BADGE_COLORS[area]||{c:'#666'}).c};">${BADGE_ICONS[area]||''} ${area}</span>`;
 
   } else {
 
@@ -2538,13 +2538,13 @@ function openProfile(handle){
 
     const short = u.desc.length>90 ? u.desc.slice(0,90)+'…' : u.desc.split('\n')[0];
 
-    snippet.innerHTML = `<span>\${short}</span> <span class="read-more" onclick="switchPTab('desc',document.querySelectorAll('.ptab')[2])">Ler mais</span>`;
+    snippet.innerHTML = `<span>${short}</span> <span class="read-more" onclick="switchPTab('desc',document.querySelectorAll('.ptab')[2])">Ler mais</span>`;
 
     if(u.isBot){
 
       // Add "...mais" button for sheet
 
-      snippet.innerHTML += ` <button style="background:none;border:none;font-size:.78rem;font-weight:700;color:var(--t);cursor:pointer;padding:0;" onclick="openBotSheet('\${u.handle}')">...mais</button>`;
+      snippet.innerHTML += ` <button style="background:none;border:none;font-size:.78rem;font-weight:700;color:var(--t);cursor:pointer;padding:0;" onclick="openBotSheet('${u.handle}')">...mais</button>`;
 
     }
 
@@ -2564,11 +2564,11 @@ function openProfile(handle){
 
   document.getElementById('profDescMeta').innerHTML = `
 
-    <div class="desc-info-row"><span class="desc-info-icon">📅</span><span>\${u.joined||'—'}</span></div>
+    <div class="desc-info-row"><span class="desc-info-icon">📅</span><span>${u.joined||'—'}</span></div>
 
-    \${u.viewsFmt?`<div class="desc-info-row"><span class="desc-info-icon">👁</span><span>\${u.viewsFmt}</span></div>`:''}
+    ${u.viewsFmt?`<div class="desc-info-row"><span class="desc-info-icon">👁</span><span>${u.viewsFmt}</span></div>`:''}
 
-    \${u.isBot?`<div class="desc-info-row"><span class="desc-info-icon">🤖</span><span>Canal da Rede Memes</span></div>`:''}
+    ${u.isBot?`<div class="desc-info-row"><span class="desc-info-icon">🤖</span><span>Canal da Rede Memes</span></div>`:''}
 
   `;
 
@@ -2652,7 +2652,7 @@ function toggleSub(){
 
     if(btn){btn.textContent='Seguindo';btn.className='prof-follow-btn following';}
 
-    toast(`✅ Seguindo @\${viewingHandle}!`);
+    toast(`✅ Seguindo @${viewingHandle}!`);
 
   }
 
@@ -2710,11 +2710,11 @@ function renderProfVideos(u, isMe){
 
       thumb.innerHTML = `
 
-        <div class="thumb-placeholder">\${emoji}</div>
+        <div class="thumb-placeholder">${emoji}</div>
 
         <div class="thumb-overlay"><span class="thumb-play">▶</span></div>
 
-        <div class="thumb-views">👁 \${views}</div>`;
+        <div class="thumb-views">👁 ${views}</div>`;
 
       thumb.onclick = () => { closeProfile(); openVideoFeed(); };
 
@@ -2742,11 +2742,11 @@ function renderProfVideos(u, isMe){
 
         <div class="prof-vid-thumb">
 
-          <video src="\${v.blobUrl}" muted preload="metadata" style="width:100%;height:100%;object-fit:cover;" onloadedmetadata="this.currentTime=0.5"></video>
+          <video src="${v.blobUrl}" muted preload="metadata" style="width:100%;height:100%;object-fit:cover;" onloadedmetadata="this.currentTime=0.5"></video>
 
           <div class="thumb-overlay"><span class="thumb-play">▶</span></div>
 
-          <div class="thumb-views">👁 \${formatNum(v.views||0)}</div>
+          <div class="thumb-views">👁 ${formatNum(v.views||0)}</div>
 
         </div>`).join('');
 
@@ -2766,7 +2766,7 @@ function renderProfEmblems(u){
 
     const can = e.req==='free'||(e.req==='vip'&&u.vip)||(e.req==='ultra'&&u.vipTier==='ultra');
 
-    return `<div class="emb\${can?' owned':' locked'}" style="background:\${e.color};" title="\${e.name}\${can?'':' (requer '+e.req+')'}">\${e.emoji}</div>`;
+    return `<div class="emb${can?' owned':' locked'}" style="background:${e.color};" title="${e.name}${can?'':' (requer '+e.req+')'}">${e.emoji}</div>`;
 
   }).join('');
 
@@ -2794,7 +2794,7 @@ function selBadge(el){regSelBadge=el.dataset.b;document.querySelectorAll('#badge
 
 function setAvCol(el,prevId){regAvUrl=null;const p=document.getElementById(prevId);p.style.background=el.dataset.c;document.querySelectorAll('.col-row .col-dot').forEach(d=>d.classList.remove('active'));el.classList.add('active');}
 
-function prevAvatar(inp,prevId){if(!inp.files[0])return;const r=new FileReader();r.onload=e=>{if(prevId==='regAvPrev')regAvUrl=e.target.result;else editAvUrl=e.target.result;const p=document.getElementById(prevId);p.innerHTML=`<img src="\${e.target.result}"/>`;};r.readAsDataURL(inp.files[0]);}
+function prevAvatar(inp,prevId){if(!inp.files[0])return;const r=new FileReader();r.onload=e=>{if(prevId==='regAvPrev')regAvUrl=e.target.result;else editAvUrl=e.target.result;const p=document.getElementById(prevId);p.innerHTML=`<img src="${e.target.result}"/>`;};r.readAsDataURL(inp.files[0]);}
 
 
 
@@ -2864,7 +2864,7 @@ function loginUser(handle){
 
   nav.textContent=u.name.charAt(0).toUpperCase();
 
-  if(u.avatar)nav.innerHTML=`<img src="\${u.avatar}"/>`;
+  if(u.avatar)nav.innerHTML=`<img src="${u.avatar}"/>`;
 
   document.getElementById('loginPrompt').style.display='none';
 
@@ -2878,7 +2878,7 @@ function loginUser(handle){
 
   av.textContent=u.name.charAt(0).toUpperCase();
 
-  if(u.avatar)av.innerHTML=`<img src="\${u.avatar}"/>`;
+  if(u.avatar)av.innerHTML=`<img src="${u.avatar}"/>`;
 
   if(u.vip)document.getElementById('scBtn').style.display='flex';
 
@@ -2886,7 +2886,7 @@ function loginUser(handle){
 
   renderComments();
 
-  toast(`👋 Bem-vindo, \${u.name}!`);
+  toast(`👋 Bem-vindo, ${u.name}!`);
 
 }
 
@@ -2926,7 +2926,7 @@ function openProfileModal(){
 
   p.style.background=u.color||'#0052e0';p.textContent=u.name.charAt(0).toUpperCase();
 
-  if(u.avatar)p.innerHTML=`<img src="\${u.avatar}"/>`;
+  if(u.avatar)p.innerHTML=`<img src="${u.avatar}"/>`;
 
   openModal('profileModal');
 
@@ -3032,11 +3032,11 @@ function sendSuperChat(){
 
   const u=APP.me;
 
-  sc.innerHTML+=`<div class="sc-item \${cls}"><div class="sc-av">\${u.name.charAt(0)}</div><div><strong style="font-size:.76rem;">\${u.name}</strong><div class="sc-msg">\${msg}</div></div><div class="sc-val">R$\${val}</div></div>`;
+  sc.innerHTML+=`<div class="sc-item ${cls}"><div class="sc-av">${u.name.charAt(0)}</div><div><strong style="font-size:.76rem;">${u.name}</strong><div class="sc-msg">${msg}</div></div><div class="sc-val">R$${val}</div></div>`;
 
   closeModal('scModal');toast('💛 Super Chat enviado!');
 
-  COMMENTS.unshift({id:nextId++,handle:u.handle,text:`💛 Super Chat R$\${val}: \${msg}`,time:'agora',likes:0,likedBy:[],pinned:false});
+  COMMENTS.unshift({id:nextId++,handle:u.handle,text:`💛 Super Chat R$${val}: ${msg}`,time:'agora',likes:0,likedBy:[],pinned:false});
 
   renderComments();
 
@@ -3176,7 +3176,7 @@ function submitVideo(){
   if(selectedDist==='bots'||selectedDist==='both'){
     setTimeout(()=>{
       const rb=getRandomBot();
-      toast(`🤖 @\${rb.handle} começou a distribuir seu vídeo!`);
+      toast(`🤖 @${rb.handle} começou a distribuir seu vídeo!`);
     },3000);
   }
 }
@@ -3197,9 +3197,9 @@ function openCreateChannel(){
 function updateChanPreview(){
   const email=document.getElementById('chanEmail').value.trim().toLowerCase().replace(/[^a-z0-9._]/g,'');
   const name=document.getElementById('chanName').value.trim();
-  const full=email?`\${email}@capdrawn.com`:'email@capdrawn.com';
+  const full=email?`${email}@capdrawn.com`:'email@capdrawn.com';
   document.getElementById('chanEmailFinal').textContent=full;
-  document.getElementById('chanEmailPreview').textContent=email?`✓ Seu email: \${full}`:'Preencha o nome do email acima';
+  document.getElementById('chanEmailPreview').textContent=email?`✓ Seu email: ${full}`:'Preencha o nome do email acima';
 }
 
 function createChannel(){
@@ -3211,13 +3211,13 @@ function createChannel(){
   if(pass.length<6){toast('⚠️ Senha deve ter ao menos 6 caracteres!');return;}
   
   // Armazenar (em produção isso ia pro backend/Postgres)
-  const fullEmail=`\${email}@capdrawn.com`;
+  const fullEmail=`${email}@capdrawn.com`;
   APP.me.channelEmail=fullEmail;
   APP.me.channelCreated=true;
   USERS[APP.me.handle].channelEmail=fullEmail;
   
   closeModal('channelModal');
-  toast(`📡 Canal criado! Email: \${fullEmail}`);
+  toast(`📡 Canal criado! Email: ${fullEmail}`);
   
   // Mostrar email no perfil
   setTimeout(()=>{
@@ -3286,7 +3286,7 @@ function submitReport(){
     // Remoção imediata
     if(v){v.removed=true;}
     // Remove do DOM
-    const el=document.querySelector(`[data-vid-id="\${currentReportVidId}"]`);
+    const el=document.querySelector(`[data-vid-id="${currentReportVidId}"]`);
     if(el){
       el.style.opacity='0';el.style.transition='opacity .3s';
       setTimeout(()=>{
@@ -3375,7 +3375,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     COMMENTS.push({
       id:nextId++,handle,
       text:['Bem-vindos ao CapDrawn MemeShorts 💀 Feed da comunidade ativo.','Feed operacional. Poste vídeos e a rede distribui.','Sistema funcionando 100% — memes da comunidade chegando.','@arquivo.secreto confirma: uploads habilitados.','Primeira vez aqui? Aperte + e publique. 😈'][i],
-      time:`\${(i+1)*2}h atrás`,likes:randInt(5,40),likedBy:[],pinned:i===0,
+      time:`${(i+1)*2}h atrás`,likes:randInt(5,40),likedBy:[],pinned:i===0,
       verified:u.verified,vip:u.vip,
     });
   });
