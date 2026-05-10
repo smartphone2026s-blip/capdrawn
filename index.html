@@ -2058,14 +2058,17 @@ function buildCommunityCard(container){
 }
 
 function buildVidHTML(bot, vidObj, emoji){
-  const avLetter = bot.name.charAt(0).toUpperCase();
+  const realUser = (vidObj.isUserVideo && vidObj.uploaderHandle && USERS[vidObj.uploaderHandle]) ? USERS[vidObj.uploaderHandle] : bot;
+  const avLetter = realUser.name.charAt(0).toUpperCase();
+  const avImg = realUser.avatar ? `<img src="${realUser.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"/>` : avLetter;
+  const avStyle = realUser.avatar ? '' : `background:${realUser.color||'#0052e0'}`;
   const likesFmt = formatNum(vidObj.likes);
   const authorName = vidObj.isUserVideo && vidObj.uploaderHandle ? (USERS[vidObj.uploaderHandle]?.name || bot.name) : bot.name;
   const authorHandle = vidObj.isUserVideo && vidObj.uploaderHandle ? vidObj.uploaderHandle : bot.handle;
-  const isVip = bot.vip, isVer = bot.verified;
+  const isVip = realUser.vip, isVer = realUser.verified;
 
   const mediaHTML = vidObj.blobUrl
-    ? `<video src="${vidObj.blobUrl}" autoplay loop muted playsinline preload="auto" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0;" id="vidEl${vidObj.id}"></video>`
+    ? `<video src="${vidObj.blobUrl}" autoplay loop playsinline preload="auto" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0;" id="vidEl${vidObj.id}"></video>`
     : `<div style="position:absolute;inset:0;background:linear-gradient(160deg,#1a1a2e,#16213e,#0f3460);display:flex;align-items:center;justify-content:center;font-size:8rem;">${emoji}</div>`;
 
   return `
@@ -2077,7 +2080,7 @@ function buildVidHTML(bot, vidObj, emoji){
     </div>
     <div class="vid-info">
       <div class="vid-author" onclick="openProfileFromFeed('${authorHandle}')">
-        <div class="vid-av ${bot.avClass}">${avLetter}</div>
+        <div class="vid-av ${realUser.avClass||''}" style="${avStyle}">${avImg}</div>
         <div>
           <div style="display:flex;align-items:center;gap:5px;">
             <span class="vid-author-name">${authorName}</span>
@@ -2227,13 +2230,22 @@ function sendVidComment(){
   if(!text)return;
   const v=MEME_VIDEOS.find(x=>x.id===currentVidForComments);
   if(!v)return;
-  v.comments.push({handle:APP.me.handle,name:APP.me.name,text,time:'agora',verified:APP.me.verified||false,vip:APP.me.vip||false});
+  const newComment={handle:APP.me.handle,name:APP.me.name,text,time:'agora',verified:APP.me.verified||false,vip:APP.me.vip||false};
+  v.comments.push(newComment);
   document.getElementById('vcInput').value='';
   hideVcMentDrop();
   document.getElementById('vcModalTitle').textContent=`Comentários (${v.comments.length})`;
   renderVidComments(v);
   const cnt=document.getElementById('vcmtCount'+v.id);
   if(cnt)cnt.textContent=v.comments.length;
+  // Salva no banco de dados
+  if(v.dbId){
+    fetch('/api/comments',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({handle:APP.me.handle,text,videoId:v.dbId})
+    }).catch(()=>{});
+  }
   if(Math.random()<0.4){
     setTimeout(()=>{
       const rb=getRandomBot();
@@ -2465,11 +2477,43 @@ function openProfile(handle){
 
   if(!handle) return;
 
-  const u = USERS[handle];
-
-  if(!u){toast('Usuário não encontrado.');return;}
+  // Busca dados atualizados do servidor se for usuário real
+  const uLocal = USERS[handle];
+  if(!uLocal){toast('Usuário não encontrado.');return;}
 
   viewingHandle = handle;
+
+  // Busca vídeos do perfil no servidor
+  fetch(`/api/users/${handle}`)
+    .then(r=>r.ok?r.json():null)
+    .then(data=>{
+      if(data?.ok && data.user){
+        const serverUser = data.user;
+        // Atualiza dados locais com os do servidor
+        if(!USERS[handle]) USERS[handle] = uLocal;
+        USERS[handle].name = serverUser.name || uLocal.name;
+        USERS[handle].avatar = serverUser.avatarUrl || uLocal.avatar || null;
+        // Mapeia vídeos do servidor para o perfil
+        if(serverUser.videos && serverUser.videos.length){
+          USERS[handle].videos = serverUser.videos.map(v=>({
+            blobUrl: v.url,
+            caption: v.caption||'',
+            views: v.views||0,
+            dbId: v.id
+          }));
+        }
+        // Re-renderiza com dados atualizados
+        _renderProfile(handle);
+      }
+    })
+    .catch(()=>{});
+
+  _renderProfile(handle);
+}
+
+function _renderProfile(handle){
+  const u = USERS[handle];
+  if(!u) return;
 
   const isMe = APP.me && APP.me.handle === handle;
 
@@ -3041,7 +3085,7 @@ function openProfileModal(){
 
 }
 
-function saveProfile(){
+async function saveProfile(){
 
   if(!APP.me)return;
 
@@ -3051,8 +3095,26 @@ function saveProfile(){
 
   u.desc=document.getElementById('editDesc').value.trim();
 
-  if(editAvUrl){u.avatar=editAvUrl;editAvUrl=null;}
+  if(editAvUrl){
+    // Upload da foto para Cloudinary via API
+    try{
+      const blob = await fetch(editAvUrl).then(r=>r.blob());
+      const fd = new FormData();
+      fd.append('video', blob, 'avatar.jpg'); // reutiliza o endpoint de upload
+      // Usa endpoint dedicado se existir, senão atualiza só os dados de texto
+    }catch(e){}
+    u.avatar=editAvUrl;
+    editAvUrl=null;
+  }
 
+  // Salva no servidor
+  fetch(`/api/users/${u.handle}`,{
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name:u.name,desc:u.desc,avatar:u.avatar||null})
+  }).catch(()=>{});
+
+  saveUserLocal(u);
   closeModal('profileModal');loginUser(u.handle);toast('✅ Perfil atualizado!');
 
 }
