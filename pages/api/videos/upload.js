@@ -18,6 +18,28 @@ export default async function handler(req, res) {
     if (!file) return res.status(400).json({ error: 'Nenhum vídeo enviado' })
 
     try {
+      // uploaderHandle vem do frontend (APP.me.handle)
+      const uploaderHandle = fields.uploaderId?.[0]
+
+      // Busca o user pelo handle para pegar o id real
+      let uploaderId = null
+      if (uploaderHandle) {
+        const user = await prisma.user.findUnique({ where: { handle: uploaderHandle } })
+        if (user) uploaderId = user.id
+        // Se não existe ainda, cria o usuário (conta offline)
+        if (!user) {
+          const created = await prisma.user.create({
+            data: {
+              handle:   uploaderHandle,
+              name:     uploaderHandle,
+              email:    `${uploaderHandle}@capdrawnn.local`,
+              password: 'offline_user',
+            }
+          })
+          uploaderId = created.id
+        }
+      }
+
       const result = await cloudinary.uploader.upload(file.filepath, {
         resource_type: 'video',
         folder: 'capdrawnn/videos',
@@ -29,7 +51,7 @@ export default async function handler(req, res) {
           url:         result.secure_url,
           caption:     fields.caption?.[0] || '',
           distributed: fields.distributed?.[0] === 'true',
-          uploaderId:  fields.uploaderId?.[0],
+          uploaderId:  uploaderId,
         }
       })
 
