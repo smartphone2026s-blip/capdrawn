@@ -20,10 +20,11 @@ model User {
   area         String?
   isVip        Boolean  @default(false)
   isVerified   Boolean  @default(false)
-  isBot        Boolean  @default(false)   // ← NOVO: marca contas de bot
+  isBot        Boolean  @default(false)
   channelEmail String?
   link         String?  @default("")
   followers    Int      @default(0)
+  totalViews   Int      @default(0)   // soma de todas as views reais+fake do canal
   createdAt    DateTime @default(now())
 
   videos        Video[]
@@ -40,9 +41,13 @@ model Video {
   caption      String?
   url          String
   thumbnailUrl String?
-  views        Int      @default(0)
-  likesCount   Int      @default(0)   // ← NOVO: likes fixos salvos no banco
+  views        Int      @default(0)       // views reais (usuários que assistiram)
+  fakeViews    Int      @default(0)       // views fake acumuladas
+  likesCount   Int      @default(0)       // likes reais (tabela Like)
+  fakeFollowerConv Int  @default(0)       // seguidores convertidos das views fake (2%)
+  fakeLikeConv Int      @default(0)       // likes convertidos das views fake (10%)
   distributed  Boolean  @default(false)
+  botHandle    String?                    // handle do bot que está distribuindo
   removed      Boolean  @default(false)
   flagged      Boolean  @default(false)
   uploaderId   String
@@ -97,13 +102,12 @@ model Report {
   createdAt  DateTime @default(now())
 }
 
-// ← NOVO: Notificações de primeira publicação
 model Notification {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id])
-  type      String   // "first_publish", "new_follower", etc.
+  type      String   // "first_publish", "new_follower", "rank_up", etc.
   seen      Boolean  @default(false)
-  data      Json?    // dados extras (ex: videoId, likes, etc.)
+  data      Json?
   createdAt DateTime @default(now())
 }
