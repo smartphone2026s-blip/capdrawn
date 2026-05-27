@@ -1,95 +1,114 @@
 // pages/api/comments.js
+// Comentários reais de vídeos — salva e carrega do banco de dados
+// Bots NÃO comentam em vídeos reais (apenas no chat da home)
+
 import prisma from '../../lib/prisma'
+import jwt from 'jsonwebtoken'
 
 export default async function handler(req, res) {
 
-  // ══ POST — salva comentário e retorna erro visível se falhar ══
+  // ── POST: salvar comentário ──────────────────────────────
   if (req.method === 'POST') {
-    const { handle, text, videoId } = req.body
-    if (!handle || !text)
-      return res.status(400).json({ ok: false, error: 'handle e text são obrigatórios' })
+    const { text, videoId } = req.body
+
+    if (!text || !text.trim())
+      return res.status(400).json({ ok: false, error: 'Comentário vazio' })
+
+    if (!videoId)
+      return res.status(400).json({ ok: false, error: 'videoId obrigatório' })
+
+    // Requer autenticação JWT
+    const authHeader = req.headers.authorization || ''
+    const token = authHeader.replace('Bearer ', '').trim()
+    if (!token)
+      return res.status(401).json({ ok: false, error: 'Login obrigatório para comentar' })
+
+    let userId
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET)
+      userId = decoded.userId
+    } catch {
+      return res.status(401).json({ ok: false, error: 'Token inválido' })
+    }
 
     try {
-      const user = await prisma.user.findUnique({ where: { handle } })
-      if (!user)
-        return res.status(404).json({ ok: false, error: `Usuário @${handle} não encontrado no banco` })
+      // Verifica se o vídeo existe
+      const video = await prisma.video.findUnique({ where: { id: videoId } })
+      if (!video || video.removed)
+        return res.status(404).json({ ok: false, error: 'Vídeo não encontrado' })
 
       const comment = await prisma.comment.create({
         data: {
-          text,
-          userId: user.id,
-          videoId: videoId || null,
+          text: text.trim(),
+          userId,
+          videoId,
         },
         include: {
-          user: { select: { handle: true, name: true, avatarUrl: true } }
+          user: { select: { handle: true, name: true, avatarUrl: true, isVerified: true, isVip: true } }
         }
       })
 
-      return res.json({ ok: true, comment })
-
-    } catch (e) {
-      console.error('[comments POST] erro:', e)
-      return res.status(500).json({
-        ok: false,
-        error: 'Erro ao salvar comentário: ' + e.message
+      // Confirmação explícita de que foi salvo
+      return res.json({
+        ok: true,
+        saved: true,   // frontend usa isso para mostrar "✅ Comentário salvo!"
+        comment: {
+          id:        comment.id,
+          text:      comment.text,
+          createdAt: comment.createdAt,
+          user: {
+            handle:     comment.user.handle,
+            name:       comment.user.name,
+            avatarUrl:  comment.user.avatarUrl,
+            isVerified: comment.user.isVerified,
+            isVip:      comment.user.isVip,
+          }
+        }
       })
+    } catch (e) {
+      console.error('[comments POST]', e)
+      return res.status(500).json({ ok: false, saved: false, error: 'Erro ao salvar comentário no servidor' })
     }
 
-  // ══ GET — retorna APENAS comentários de usuários reais (não bots) ══
+  // ── GET: carregar comentários de um vídeo ──────────────────
   } else if (req.method === 'GET') {
     const { videoId } = req.query
+    if (!videoId)
+      return res.status(400).json({ ok: false, error: 'videoId obrigatório' })
 
     try {
       const comments = await prisma.comment.findMany({
-        where: videoId
-          ? { videoId }
-          : { videoId: null },
-        orderBy: { createdAt: 'desc' },
-        take: 100,
+        where: { videoId, video: { removed: false } },
+        orderBy: { createdAt: 'asc' },
+        take: 200,
         include: {
           user: {
-            select: {
-              handle: true,
-              name: true,
-              avatarUrl: true,
-              isVip: true,
-              isVerified: true,
-              email: true,       // usado para filtrar bots abaixo
-            }
+            select: { handle: true, name: true, avatarUrl: true, isVerified: true, isVip: true }
           }
         }
       })
 
-      // Filtra bots: emails com @capdrawnn.local são contas de bot/offline
-      const realComments = comments.filter(c => {
-        if (!c.user) return false
-        const isBotEmail = c.user.email?.endsWith('@capdrawnn.local')
-        return !isBotEmail
+      return res.json({
+        ok: true,
+        comments: comments.map(c => ({
+          id:        c.id,
+          text:      c.text,
+          createdAt: c.createdAt,
+          user: {
+            handle:     c.user.handle,
+            name:       c.user.name,
+            avatarUrl:  c.user.avatarUrl,
+            isVerified: c.user.isVerified,
+            isVip:      c.user.isVip,
+          }
+        }))
       })
-
-      // Remove o campo email da resposta (não expor)
-      const safeComments = realComments.map(c => ({
-        id:        c.id,
-        text:      c.text,
-        createdAt: c.createdAt,
-        videoId:   c.videoId,
-        user: {
-          handle:     c.user.handle,
-          name:       c.user.name,
-          avatarUrl:  c.user.avatarUrl,
-          isVip:      c.user.isVip,
-          isVerified: c.user.isVerified,
-        }
-      }))
-
-      return res.json({ ok: true, comments: safeComments })
-
     } catch (e) {
-      console.error('[comments GET] erro:', e)
-      return res.status(500).json({ ok: false, error: 'Erro ao buscar comentários: ' + e.message })
+      console.error('[comments GET]', e)
+      return res.status(500).json({ ok: false, error: 'Erro ao buscar comentários' })
     }
 
   } else {
-    res.status(405).end()
+    return res.status(405).end()
   }
 }
