@@ -1,9 +1,11 @@
 // pages/api/users/[handle].js
-// GET: retorna perfil + vídeos com likes/views reais do banco
-// PUT: atualiza nome, bio, link e avatar (via Cloudinary se base64 enviado)
+// Perfil de usuário corrigido:
+// - Retorna videos com views TOTAIS (reais + fake)
+// - Retorna likes TOTAIS
+// - Retorna totalViews e followers atualizados
+// - Suporta vídeos distribuídos por bots (exibe na conta do bot)
 
 import { PrismaClient } from '@prisma/client'
-import cloudinary from '../../../lib/cloudinary'
 import jwt from 'jsonwebtoken'
 
 const globalForPrisma = globalThis
@@ -13,7 +15,7 @@ const prisma = globalForPrisma.prisma
 export default async function handler(req, res) {
   const { handle } = req.query
 
-  // ══ GET — busca perfil completo com vídeos reais ══
+  // ── GET: buscar perfil + vídeos ──────────────────────────
   if (req.method === 'GET') {
     try {
       const user = await prisma.user.findUnique({
@@ -22,87 +24,107 @@ export default async function handler(req, res) {
           videos: {
             where: { removed: false },
             orderBy: { createdAt: 'desc' },
-            select: {
-              id:          true,
-              url:         true,
-              thumbnailUrl: true,
-              caption:     true,
-              views:       true,
-              likesCount:  true,
-              distributed: true,
-              createdAt:   true,
-              _count: { select: { comments: true } }
+            include: {
+              _count: { select: { likes: true, comments: true } }
             }
           }
         }
       })
-
       if (!user) return res.status(404).json({ ok: false, error: 'Usuário não encontrado' })
 
-      // Nunca expõe senha ou email de bots
-      const { password, ...safeUser } = user
+      // Para bots: busca vídeos onde botHandle = handle (vídeos que o bot está distribuindo)
+      let botVideos = []
+      if (user.isBot) {
+        botVideos = await prisma.video.findMany({
+          where: { botHandle: handle, removed: false },
+          orderBy: { createdAt: 'desc' },
+          include: {
+            uploader: { select: { handle: true, name: true, avatarUrl: true } },
+            _count: { select: { likes: true, comments: true } }
+          }
+        })
+      }
 
-      return res.json({ ok: true, user: safeUser })
+      // Formata vídeos com totais
+      const formatVideo = (v, isBotVideo = false) => ({
+        id:           v.id,
+        url:          v.url,
+        thumbnailUrl: v.thumbnailUrl,
+        caption:      v.caption,
+        views:        (v.views || 0) + (v.fakeViews || 0),
+        likes:        (v.likesCount || 0) + (v.fakeLikeConv || 0),
+        comments:     v._count?.comments || 0,
+        distributed:  v.distributed,
+        botHandle:    v.botHandle,
+        uploader:     isBotVideo ? v.uploader : null, // só bots exibem o uploader original
+        createdAt:    v.createdAt,
+      })
+
+      const allVideos = user.isBot
+        ? botVideos.map(v => formatVideo(v, true))
+        : user.videos.map(v => formatVideo(v, false))
+
+      // Totais do canal
+      const totalLikes = user.videos.reduce((s, v) => s + (v.likesCount || 0) + (v.fakeLikeConv || 0), 0)
+      const totalViews = user.totalViews || user.videos.reduce((s, v) => s + (v.views || 0) + (v.fakeViews || 0), 0)
+
+      return res.json({
+        ok: true,
+        user: {
+          id:          user.id,
+          handle:      user.handle,
+          name:        user.name,
+          avatarUrl:   user.avatarUrl,
+          bio:         user.bio,
+          area:        user.area,
+          isVip:       user.isVip,
+          isVerified:  user.isVerified,
+          isBot:       user.isBot,
+          followers:   user.followers,
+          totalViews,
+          totalLikes,
+          videoCount:  allVideos.length,
+          createdAt:   user.createdAt,
+          link:        user.link,
+          channelEmail: user.channelEmail,
+        },
+        videos: allVideos
+      })
     } catch (e) {
       console.error('[handle GET]', e)
-      return res.status(500).json({ ok: false, error: 'Erro ao buscar usuário: ' + e.message })
+      return res.status(500).json({ ok: false, error: e.message })
     }
-  }
 
-  // ══ PUT — atualiza perfil (requer JWT) ══
-  if (req.method === 'PUT') {
-    const token = (req.headers.authorization || '').replace('Bearer ', '').trim()
+  // ── PUT: atualizar perfil ────────────────────────────────
+  } else if (req.method === 'PUT') {
+    const authHeader = req.headers.authorization || ''
+    const token = authHeader.replace('Bearer ', '').trim()
     if (!token) return res.status(401).json({ ok: false, error: 'Token obrigatório' })
 
-    let tokenUserId
+    let userId
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET)
-      tokenUserId = decoded.userId
+      userId = decoded.userId
     } catch {
       return res.status(401).json({ ok: false, error: 'Token inválido' })
     }
 
-    // Garante que o usuário só pode editar o próprio perfil
-    const owner = await prisma.user.findUnique({ where: { handle } })
-    if (!owner) return res.status(404).json({ ok: false, error: 'Usuário não encontrado' })
-    if (owner.id !== tokenUserId) return res.status(403).json({ ok: false, error: 'Sem permissão' })
-
-    const { name, bio, link, avatarBase64 } = req.body
-
+    const { name, desc, link } = req.body
     try {
-      let avatarUrl = undefined
-
-      // Upload do avatar para Cloudinary se base64 foi enviado
-      if (avatarBase64) {
-        const result = await cloudinary.uploader.upload(avatarBase64, {
-          resource_type: 'image',
-          folder: 'capdrawnn/avatars',
-          transformation: [
-            { width: 200, height: 200, crop: 'fill', gravity: 'face' },
-            { quality: 'auto', fetch_format: 'auto' }
-          ]
-        })
-        avatarUrl = result.secure_url
-      }
-
-      const updated = await prisma.user.update({
+      const user = await prisma.user.update({
         where: { handle },
         data: {
-          ...(name !== undefined      && { name }),
-          ...(bio  !== undefined      && { bio }),
-          ...(link !== undefined      && { link }),
-          ...(avatarUrl !== undefined && { avatarUrl }),
+          ...(name              !== undefined && { name }),
+          ...(desc              !== undefined && { bio: desc }),
+          ...(link              !== undefined && { link }),
         }
       })
-
-      const { password, email, ...safeUser } = updated
-      return res.json({ ok: true, user: safeUser })
-
+      return res.json({ ok: true, user })
     } catch (e) {
-      console.error('[handle PUT]', e)
-      return res.status(500).json({ ok: false, error: 'Erro ao atualizar perfil: ' + e.message })
+      return res.status(500).json({ ok: false, error: e.message })
     }
-  }
 
-  res.status(405).end()
+  } else {
+    return res.status(405).end()
+  }
 }
