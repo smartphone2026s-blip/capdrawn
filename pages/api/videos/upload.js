@@ -65,14 +65,23 @@ export default async function handler(req, res) {
       const thumbnailUrl   = result.eager?.[0]?.secure_url || null
       const distributed    = distMode === 'bots' || distMode === 'both'
 
-      // Se modo bot: o uploaderId é o usuário real, mas botHandle aponta quem vai exibir
-      // Se modo perfil: vai para o perfil do usuário
+      // Resolve qual bot vai distribuir
       let finalBotHandle = null
+      let botUserId = null
       if (distributed && botHandle) {
-        // Verifica se o bot existe no banco
         const bot = await prisma.user.findUnique({ where: { handle: botHandle, isBot: true } })
-        if (bot) finalBotHandle = bot.handle
+        if (bot) { finalBotHandle = bot.handle; botUserId = bot.id }
       }
+      // Se sem botHandle específico, pega um bot aleatório
+      if (distributed && !finalBotHandle) {
+        const randomBot = await prisma.user.findFirst({ where: { isBot: true }, orderBy: { createdAt: 'asc' } })
+        if (randomBot) { finalBotHandle = randomBot.handle; botUserId = randomBot.id }
+      }
+
+      // Quando distribuído por bot: uploaderId = bot (aparece no perfil do bot no feed)
+      // O campo botHandle guarda quem é o bot distribuidor para mostrar no feed
+      // O uploader real fica registrado via botHandle → crédito no frontend
+      const effectiveUploaderId = (distributed && botUserId) ? botUserId : tokenUserId
 
       const video = await prisma.video.create({
         data: {
@@ -81,7 +90,8 @@ export default async function handler(req, res) {
           caption:      caption.trim() || null,
           distributed,
           botHandle:    finalBotHandle,
-          uploaderId:   tokenUserId,
+          uploaderId:   effectiveUploaderId,
+          // ownerUserId: campo opcional — só inclui se existir no schema Prisma
         }
       })
 
