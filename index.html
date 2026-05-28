@@ -1088,14 +1088,10 @@ function buildVideoCard(v) {
 
   // Copyright notice (vídeo distribuído por bot)
   let copyrightHtml = '';
-  if (v.distributor) {
-    // sentBy = quem enviou pro bot; uploader = dono real (pode ser o bot quando distribuido)
-    const realOwner = v.sentBy || (!v.uploader?.isBot ? v.uploader : null);
-    if (realOwner && realOwner.handle !== v.distributor.handle) {
-      copyrightHtml = `<div class="vid-copyright">📝 Enviado por: <a onclick="openProfileFromFeed('${realOwner.handle}')">@${realOwner.handle}</a> · Distribuidor: <a onclick="openProfileFromFeed('${v.distributor.handle}')">@${v.distributor.handle}</a></div>`;
-    } else {
-      copyrightHtml = `<div class="vid-copyright">🤖 Distribuído por <a onclick="openProfileFromFeed('${v.distributor.handle}')">@${v.distributor.handle}</a></div>`;
-    }
+  if (v.distributor && v.uploader) {
+    // sentBy = quem realmente enviou (usuário real); uploader pode ser o bot
+    const realOwner = v.sentBy || v.uploader;
+    copyrightHtml = `<div class="vid-copyright">📝 Direitos: <a onclick="openProfileFromFeed('${realOwner.handle}')">@${realOwner.handle}</a> · Distribuidor: <a onclick="openProfileFromFeed('${v.distributor.handle}')">@${v.distributor.handle}</a></div>`;
   }
 
   item.innerHTML = `
@@ -1142,8 +1138,7 @@ function setupVidObserver(container) {
       const vid = e.target.querySelector('video');
       if (vid) {
         if (e.isIntersecting) {
-          vid.muted = false;
-          vid.play().catch(() => { vid.muted = true; vid.play().catch(()=>{}); });
+          vid.play().catch(() => {});
           // Registra view real no banco
           const vidId = e.target.dataset.vidId;
           if (vidId) fetch(`/api/videos/${vidId}/interact`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'view'})}).catch(()=>{});
@@ -1612,8 +1607,8 @@ function renderProfVideos(u, videos, isMe) {
   noVids.style.display = 'none';
   grid.innerHTML = videos.map(v => {
     // Para vídeos enviados via bot: mostra tag do bot
-    const copyTag = v.viaBot && v.botHandle
-      ? `<div class="thumb-copy" style="position:absolute;bottom:24px;left:4px;background:rgba(0,0,0,.7);color:#fff;font-size:.58rem;padding:2px 5px;border-radius:4px;">🤖 @${v.botHandle}</div>` : '';
+    const copyTag = v.viaBot && v.uploader
+      ? `<div class="thumb-copy">🤖@${v.uploader.handle}</div>` : '';
     // Usuário pode apagar seus próprios vídeos (diretos ou enviados via bot)
     const canDelete = isMe;
     return `<div class="prof-vid-thumb" onclick="playProfVid('${v.id}','${v.url}')">
@@ -1628,25 +1623,15 @@ function renderProfVideos(u, videos, isMe) {
   }).join('');
 }
 
-async function playProfVid(id, url) {
-  let v = feedVideos.find(x => x.id === id);
+function playProfVid(id, url) {
+  // Abre no feed de vídeos direto no vídeo clicado
+  const v = feedVideos.find(x => x.id === id);
   if (!v) {
-    try {
-      const res = await fetch('/api/videos/feed?limit=50');
-      const data = await res.json();
-      if (data.ok) data.videos.forEach(fv => { if (!feedVideos.find(x => x.id === fv.id)) feedVideos.push(fv); });
-    } catch(e) {}
-    v = feedVideos.find(x => x.id === id);
-  }
-  if (!v) { v = { id, url, caption: '', likes: 0, comments: 0, views: 0 }; feedVideos.unshift(v); }
-  closeProfile();
-  setTimeout(() => {
+    // Se não está no feed, adiciona temporariamente e abre
     openVideoFeed();
-    setTimeout(() => {
-      const el = document.querySelector('.vid-snap-item[data-vid-id="' + id + '"]');
-      if (el) el.scrollIntoView({ behavior: 'instant' });
-    }, 250);
-  }, 100);
+    return;
+  }
+  openVideoFeed();
 }
 
 async function confirmDeleteVideo(id) {
@@ -2269,12 +2254,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (location.hash === '#shorts') {
     setTimeout(() => {
       const el = document.getElementById('ftShorts');
-      currentFeedTab = 'shorts'; // define ANTES de abrir para não buscar 'all' primeiro
       openVideoFeed();
-      if (el) {
-        document.querySelectorAll('.feed-tab').forEach(t => t.classList.remove('active'));
-        el.classList.add('active');
-      }
+      if (el) switchFeedTab('shorts', el);
     }, 400);
   }
 });
