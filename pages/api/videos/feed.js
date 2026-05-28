@@ -33,7 +33,14 @@ export default async function handler(req, res) {
         take: limit,
         skip: randomSkip,
       })
-      return res.json({ ok: true, videos: formatVideos(videos), page, limit })
+      // Busca bots distribuidores para a aba shorts também
+      const shortsBotHandles = [...new Set(videos.filter(v => v.botHandle).map(v => v.botHandle))]
+      const shortsBots = shortsBotHandles.length ? await prisma.user.findMany({
+        where: { handle: { in: shortsBotHandles } },
+        select: { handle: true, name: true, avatarUrl: true, isVerified: true, isVip: true, isBot: true }
+      }) : []
+      const shortsBotMap = Object.fromEntries(shortsBots.map(b => [b.handle, b]))
+      return res.json({ ok: true, videos: formatVideos(videos, shortsBotMap), page, limit })
     }
 
     const videos = await prisma.video.findMany({
@@ -72,7 +79,17 @@ function formatVideos(videos, botMap = {}) {
   return videos.map(v => {
     const totalViews = (v.views || 0) + (v.fakeViews || 0)
     const totalLikes = (v.likesCount || 0) + (v.fakeLikeConv || 0)
-    const distributor = v.botHandle ? (botMap[v.botHandle] || null) : null
+    // Garante boolean (campo pode vir como string 'true' dependendo do banco)
+    const isDistributed = v.distributed === true || v.distributed === 'true'
+    // Distributor: usa botMap, fallback para o uploader se ele próprio for bot
+    let distributor = null
+    if (isDistributed && v.botHandle) {
+      distributor = botMap[v.botHandle] || null
+      // Se não encontrou no map, monta objeto mínimo com o handle
+      if (!distributor) {
+        distributor = { handle: v.botHandle, name: v.botHandle, avatarUrl: null, isVerified: false, isVip: false, isBot: true }
+      }
+    }
     return {
       id:           v.id,
       url:          v.url,
@@ -81,7 +98,7 @@ function formatVideos(videos, botMap = {}) {
       views:        totalViews,
       likes:        totalLikes,
       comments:     v._count?.comments || 0,
-      distributed:  v.distributed,
+      distributed:  isDistributed,
       botHandle:    v.botHandle || null,
       distributor,          // objeto do bot { handle, name, avatarUrl, ... }
       uploader:     v.uploader,
