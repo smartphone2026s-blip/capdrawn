@@ -14,8 +14,8 @@ export default async function handler(req, res) {
     if (!text || !text.trim())
       return res.status(400).json({ ok: false, error: 'Comentário vazio' })
 
-    if (!videoId)
-      return res.status(400).json({ ok: false, error: 'videoId obrigatório' })
+    // videoId null/undefined = comentário da home (chat da comunidade)
+    const isHomeComment = !videoId
 
     // Requer autenticação JWT
     const authHeader = req.headers.authorization || ''
@@ -32,16 +32,18 @@ export default async function handler(req, res) {
     }
 
     try {
-      // Verifica se o vídeo existe
-      const video = await prisma.video.findUnique({ where: { id: videoId } })
-      if (!video || video.removed)
-        return res.status(404).json({ ok: false, error: 'Vídeo não encontrado' })
+      // Para comentários da home, não verifica vídeo
+      if (!isHomeComment) {
+        const video = await prisma.video.findUnique({ where: { id: videoId } })
+        if (!video || video.removed)
+          return res.status(404).json({ ok: false, error: 'Vídeo não encontrado' })
+      }
 
       const comment = await prisma.comment.create({
         data: {
           text: text.trim(),
           userId,
-          videoId,
+          videoId: isHomeComment ? null : videoId,
         },
         include: {
           user: { select: { handle: true, name: true, avatarUrl: true, isVerified: true, isVip: true } }
@@ -75,6 +77,40 @@ export default async function handler(req, res) {
     const { videoId } = req.query
     if (!videoId)
       return res.status(400).json({ ok: false, error: 'videoId obrigatório' })
+
+    // videoId=home → retorna comentários da comunidade (sem videoId no banco)
+    if (videoId === 'home') {
+      try {
+        const comments = await prisma.comment.findMany({
+          where: { videoId: null },
+          orderBy: { createdAt: 'asc' },
+          take: 200,
+          include: {
+            user: {
+              select: { handle: true, name: true, avatarUrl: true, isVerified: true, isVip: true }
+            }
+          }
+        })
+        return res.json({
+          ok: true,
+          comments: comments.map(c => ({
+            id:        c.id,
+            text:      c.text,
+            createdAt: c.createdAt,
+            user: {
+              handle:     c.user.handle,
+              name:       c.user.name,
+              avatarUrl:  c.user.avatarUrl,
+              isVerified: c.user.isVerified,
+              isVip:      c.user.isVip,
+            }
+          }))
+        })
+      } catch (e) {
+        console.error('[comments GET home]', e)
+        return res.status(500).json({ ok: false, error: 'Erro ao buscar comentários da home' })
+      }
+    }
 
     try {
       const comments = await prisma.comment.findMany({
