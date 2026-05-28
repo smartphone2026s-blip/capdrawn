@@ -2254,8 +2254,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (location.hash === '#shorts') {
     setTimeout(() => {
       const el = document.getElementById('ftShorts');
+      currentFeedTab = 'shorts'; // define ANTES de abrir para não buscar 'all' primeiro
       openVideoFeed();
-      if (el) switchFeedTab('shorts', el);
+      if (el) {
+        document.querySelectorAll('.feed-tab').forEach(t => t.classList.remove('active'));
+        el.classList.add('active');
+      }
     }, 400);
   }
 });
