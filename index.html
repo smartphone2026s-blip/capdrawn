@@ -1089,7 +1089,9 @@ function buildVideoCard(v) {
   // Copyright notice (vídeo distribuído por bot)
   let copyrightHtml = '';
   if (v.distributor && v.uploader) {
-    copyrightHtml = `<div class="vid-copyright">📝 Direitos: <a onclick="openProfileFromFeed('${v.uploader.handle}')">@${v.uploader.handle}</a> · Distribuidor: <a onclick="openProfileFromFeed('${v.distributor.handle}')">@${v.distributor.handle}</a></div>`;
+    // sentBy = quem realmente enviou (usuário real); uploader pode ser o bot
+    const realOwner = v.sentBy || v.uploader;
+    copyrightHtml = `<div class="vid-copyright">📝 Direitos: <a onclick="openProfileFromFeed('${realOwner.handle}')">@${realOwner.handle}</a> · Distribuidor: <a onclick="openProfileFromFeed('${v.distributor.handle}')">@${v.distributor.handle}</a></div>`;
   }
 
   item.innerHTML = `
@@ -1190,6 +1192,7 @@ function closeVideoFeed() {
   document.querySelectorAll('#videoFeedContainer video').forEach(v => v.pause());
   document.getElementById('videoFeedPage').style.display = 'none';
   document.body.style.overflow = '';
+  history.replaceState(null, '', location.pathname); // limpa #shorts da URL
   setActiveNav('bnavHome');
 }
 
@@ -1197,6 +1200,8 @@ function switchFeedTab(tab, el) {
   currentFeedTab = tab;
   document.querySelectorAll('.feed-tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
+  // Atualiza URL para compartilhar
+  history.replaceState(null, '', tab === 'shorts' ? '#shorts' : '#feed');
   // Recarrega o feed com a nova aba
   const container = document.getElementById('videoFeedContainer');
   container.innerHTML = '';
@@ -1601,10 +1606,11 @@ function renderProfVideos(u, videos, isMe) {
 
   noVids.style.display = 'none';
   grid.innerHTML = videos.map(v => {
-    // Para vídeos de bots: mostra crédito do dono original
-    const copyTag = v.uploader
-      ? `<div class="thumb-copy">©@${v.uploader.handle}</div>` : '';
-    const canDelete = isMe; // usuário pode apagar vídeo do próprio canal ou que publicou
+    // Para vídeos enviados via bot: mostra tag do bot
+    const copyTag = v.viaBot && v.uploader
+      ? `<div class="thumb-copy">🤖@${v.uploader.handle}</div>` : '';
+    // Usuário pode apagar seus próprios vídeos (diretos ou enviados via bot)
+    const canDelete = isMe;
     return `<div class="prof-vid-thumb" onclick="playProfVid('${v.id}','${v.url}')">
       ${v.url
         ? `<video src="${v.url}" muted preload="metadata" style="width:100%;height:100%;object-fit:cover;" onloadedmetadata="this.currentTime=0.5" onerror="this.style.display='none'"></video>`
@@ -2100,7 +2106,37 @@ function createChannel(){
 function openReportModal(vidId){currentReportVidId=vidId;reportType=null;copyrightType=null;document.querySelectorAll('.report-opt').forEach(o=>o.classList.remove('sel'));document.getElementById('reportCopyrightSub').classList.remove('show');document.getElementById('reportConfirmBox').style.display='none';openModal('reportModal');}
 function selReport(type){reportType=type;copyrightType=null;document.querySelectorAll('.report-opt').forEach(o=>o.classList.remove('sel'));document.getElementById('ropt1').classList.toggle('sel',type==='inappropriate');document.getElementById('ropt2').classList.toggle('sel',type==='copyright');const sub=document.getElementById('reportCopyrightSub');sub.classList.toggle('show',type==='copyright');const box=document.getElementById('reportConfirmBox');if(type==='inappropriate'){box.style.display='block';document.getElementById('reportConfirmTxt').textContent='Este vídeo será revisado pela equipe em até 24h.';}else{box.style.display='none';}}
 function selCopyrightType(type){copyrightType=type;['Owner','Third'].forEach(t=>{document.getElementById('rsub'+t).classList.toggle('sel',type===t.toLowerCase());document.getElementById('rsub'+t+'Dot').style.background=type===t.toLowerCase()?'var(--blue)':'';document.getElementById('rsub'+t+'Dot').style.borderColor=type===t.toLowerCase()?'var(--blue)':'var(--border2)';});const box=document.getElementById('reportConfirmBox');box.style.display='block';document.getElementById('reportConfirmTxt').textContent=type==='owner'?'Como detentor, o vídeo será removido imediatamente.':'Nossa equipe avaliará em 48h.';}
-function submitReport(){if(!reportType){toast('⚠️ Selecione o tipo!');return;}if(reportType==='copyright'&&!copyrightType){toast('⚠️ Selecione sua relação com o conteúdo!');return;}closeModal('reportModal');const msgs={'inappropriate':'🚩 Denúncia enviada! Revisaremos em 24h.','copyright':'📋 Denúncia de direitos enviada!'};toast(msgs[reportType]||'📋 Denúncia enviada!');currentReportVidId=null;}
+function submitReport(){
+  if(!reportType){toast('⚠️ Selecione o tipo!');return;}
+  if(reportType==='copyright'&&!copyrightType){toast('⚠️ Selecione sua relação com o conteúdo!');return;}
+  closeModal('reportModal');
+
+  const videoId = currentReportVidId;
+  currentReportVidId = null;
+
+  const msgs={'inappropriate':'🚩 Denúncia enviada! Revisaremos em 24h.','copyright':'📋 Denúncia de direitos enviada!'};
+  toast(msgs[reportType]||'📋 Denúncia enviada!');
+
+  // Chama a API de denúncia
+  fetch('/api/report', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      videoId,
+      type: reportType,
+      subtype: copyrightType || null,
+      reporterId: APP.me?.id || null
+    })
+  }).then(r => r.json()).then(data => {
+    // Se for copyright/owner → vídeo foi removido, tira do feed também
+    if(data.ok && reportType === 'copyright' && copyrightType === 'owner') {
+      feedVideos = feedVideos.filter(v => v.id !== videoId);
+      const el = document.querySelector(`.vid-snap-item[data-vid-id="${videoId}"]`);
+      if(el) el.remove();
+      toast('🗑 Vídeo removido com sucesso!');
+    }
+  }).catch(()=>{});
+}
 
 // ═══════════════════════════════════════
 // PUBLISH MENU
@@ -2213,6 +2249,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Seed de bots se necessário (roda em background, não bloqueia)
   fetch('/api/admin/seed-bots').catch(()=>{});
+
+  // ── URL pública de Shorts: se hash=#shorts abre direto o feed ──
+  if (location.hash === '#shorts') {
+    setTimeout(() => {
+      const el = document.getElementById('ftShorts');
+      openVideoFeed();
+      if (el) switchFeedTab('shorts', el);
+    }, 400);
+  }
 });
 
 document.addEventListener('click', e => {
