@@ -28,7 +28,6 @@ export default async function handler(req, res) {
     return res.status(401).json({ ok: false, error: 'Login obrigatório para enviar vídeos' })
   }
 
-  // Aceita até 200MB no formidable (o Cloudinary vai comprimir)
   const form = formidable({ maxFileSize: 200 * 1024 * 1024 })
 
   form.parse(req, async (err, fields, files) => {
@@ -45,50 +44,37 @@ export default async function handler(req, res) {
     }
 
     try {
-      const caption   = fields.caption?.[0] || ''
-      // distMode vem do campo 'distMode' (profile|bots|both)
-      // 'distributed' é boolean string 'true'/'false' — fallback para compatibilidade
+      const caption      = fields.caption?.[0] || ''
       const distModeRaw  = fields.distMode?.[0] || ''
       const distBoolRaw  = fields.distributed?.[0] || 'false'
       const distMode     = distModeRaw || (distBoolRaw === 'true' ? 'bots' : 'profile')
       const botHandle    = fields.botHandle?.[0] || null
 
-      // ── Cloudinary: compressão inteligente + rápida ──────────────────────
-      // - quality: 'auto:good'  → Cloudinary analisa o conteúdo e comprime
-      //   sem artefatos visíveis. 'auto:best' preserva mais, 'auto:eco' comprime mais.
-      // - fetch_format: 'auto'  → entrega mp4/webm conforme o browser
-      // - video_codec: 'auto'   → escolhe H.264 ou VP9 automaticamente
-      // - bit_rate: '800k'      → teto de bitrate — suficiente pra short 720p
-      //   (TikTok usa ~1.5Mbps; 800k já é imperceptível pra meme)
-      // - width/height + crop   → redimensiona pra 720p vertical se vier maior
-      // - flags: 'streaming_attachment' → streaming progressivo (começa rápido)
-      // ─────────────────────────────────────────────────────────────────────
       const result = await cloudinary.uploader.upload(file.filepath, {
         resource_type: 'video',
         folder: 'capdrawnn/videos',
         transformation: [
           {
-            quality:      'auto:good',   // compressão inteligente, qualidade boa
-            fetch_format: 'auto',        // formato ideal por browser
-            video_codec:  'auto',        // H.264 ou VP9 conforme suporte
-            bit_rate:     '900k',        // teto de bitrate (short de meme não precisa mais)
-            width:        720,           // limita a 720p de largura
-            height:       1280,          // altura máxima 1280 (9:16)
-            crop:         'limit',       // só reduz, nunca aumenta
+            quality:      'auto:good',
+            fetch_format: 'auto',
+            video_codec:  'auto',
+            bit_rate:     '900k',
+            width:        720,
+            height:       1280,
+            crop:         'limit',
           }
         ],
         eager: [
-          // thumbnail 9:16 para preview
           { width: 320, height: 568, crop: 'fill', format: 'jpg', quality: 'auto' }
         ],
-        eager_async: false, // aguarda thumbnail antes de retornar
+        eager_async: false,
       })
 
-      const cloudUrl     = result.secure_url
-      const thumbnailUrl = result.eager?.[0]?.secure_url || null
-      const distributed  = distMode === 'bots' || distMode === 'both'
+      const cloudUrl         = result.secure_url
+      const cloudPublicId    = result.public_id
+      const thumbnailUrl     = result.eager?.[0]?.secure_url || null
+      const distributed      = distMode === 'bots' || distMode === 'both'
 
-      // Resolve bot distribuidor
       let finalBotHandle = null
       let botUserId = null
       if (distributed && botHandle) {
@@ -100,17 +86,18 @@ export default async function handler(req, res) {
         if (randomBot) { finalBotHandle = randomBot.handle; botUserId = randomBot.id }
       }
 
-      // Modo bot: uploaderId = bot (vídeo aparece no perfil do bot)
       const effectiveUploaderId = (distributed && botUserId) ? botUserId : tokenUserId
 
       const video = await prisma.video.create({
         data: {
-          url:          cloudUrl,
+          url:                cloudUrl,
           thumbnailUrl,
-          caption:      caption.trim() || null,
+          caption:            caption.trim() || null,
           distributed,
-          botHandle:    finalBotHandle,
-          uploaderId:   effectiveUploaderId,
+          botHandle:          finalBotHandle,
+          uploaderId:         effectiveUploaderId,
+          cloudinaryPublicId: cloudPublicId,
+          sentById:           (distributed && botUserId) ? tokenUserId : null,
         }
       })
 
@@ -128,7 +115,6 @@ export default async function handler(req, res) {
       })
     } catch (e) {
       console.error('[upload]', e)
-      // Mensagem amigável para erro de tamanho do Cloudinary
       const msg = e.message || ''
       const friendly = msg.toLowerCase().includes('too large')
         ? 'Vídeo muito grande para o servidor. Tente um vídeo menor (até ~150MB) ou mais curto.'
