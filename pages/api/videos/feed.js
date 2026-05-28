@@ -1,10 +1,4 @@
 // pages/api/videos/feed.js
-// Feed de vídeos corrigido:
-// - retorna views TOTAIS (reais + fake)
-// - retorna info do bot distribuidor (se houver)
-// - retorna likes totais (reais + fake)
-// - suporta paginação e tab (all | following)
-
 import prisma from '../../../lib/prisma'
 import jwt from 'jsonwebtoken'
 
@@ -15,25 +9,22 @@ export default async function handler(req, res) {
     const page  = Math.max(1, parseInt(req.query.page  || '1'))
     const limit = Math.min(50, parseInt(req.query.limit || '10'))
     const skip  = (page - 1) * limit
-    const tab   = req.query.tab || 'all' // 'all' | 'shorts'
+    const tab   = req.query.tab || 'all'
 
-    // Para o feed de curtos: pega aleatório via orderBy rand-like (offset random)
-    let orderBy = { createdAt: 'desc' }
     if (tab === 'shorts') {
-      // Ordem aleatória: usa skip aleatório dentro do total
       const total = await prisma.video.count({ where: { removed: false, flagged: false } })
       const randomSkip = total > limit ? Math.floor(Math.random() * (total - limit)) : 0
       const videos = await prisma.video.findMany({
         where: { removed: false, flagged: false },
         include: {
           uploader: { select: { id: true, name: true, handle: true, avatarUrl: true, isVerified: true, isVip: true, isBot: true } },
+          sentBy:   { select: { id: true, name: true, handle: true, avatarUrl: true, isVerified: true, isVip: true } },
           _count:   { select: { likes: true, comments: true } }
         },
         orderBy: { createdAt: 'asc' },
         take: limit,
         skip: randomSkip,
       })
-      // Busca bots distribuidores para a aba shorts também
       const shortsBotHandles = [...new Set(videos.filter(v => v.botHandle).map(v => v.botHandle))]
       const shortsBots = shortsBotHandles.length ? await prisma.user.findMany({
         where: { handle: { in: shortsBotHandles } },
@@ -47,14 +38,14 @@ export default async function handler(req, res) {
       where: { removed: false, flagged: false },
       include: {
         uploader: { select: { id: true, name: true, handle: true, avatarUrl: true, isVerified: true, isVip: true, isBot: true } },
+        sentBy:   { select: { id: true, name: true, handle: true, avatarUrl: true, isVerified: true, isVip: true } },
         _count:   { select: { likes: true, comments: true } }
       },
-      orderBy,
+      orderBy: { createdAt: 'desc' },
       take: limit,
       skip,
     })
 
-    // Para cada vídeo distribuído por bot, busca o bot
     const botHandles = [...new Set(videos.filter(v => v.botHandle).map(v => v.botHandle))]
     const bots = botHandles.length ? await prisma.user.findMany({
       where: { handle: { in: botHandles } },
@@ -79,13 +70,10 @@ function formatVideos(videos, botMap = {}) {
   return videos.map(v => {
     const totalViews = (v.views || 0) + (v.fakeViews || 0)
     const totalLikes = (v.likesCount || 0) + (v.fakeLikeConv || 0)
-    // Garante boolean (campo pode vir como string 'true' dependendo do banco)
     const isDistributed = v.distributed === true || v.distributed === 'true'
-    // Distributor: usa botMap, fallback para o uploader se ele próprio for bot
     let distributor = null
     if (isDistributed && v.botHandle) {
       distributor = botMap[v.botHandle] || null
-      // Se não encontrou no map, monta objeto mínimo com o handle
       if (!distributor) {
         distributor = { handle: v.botHandle, name: v.botHandle, avatarUrl: null, isVerified: false, isVip: false, isBot: true }
       }
@@ -100,8 +88,9 @@ function formatVideos(videos, botMap = {}) {
       comments:     v._count?.comments || 0,
       distributed:  isDistributed,
       botHandle:    v.botHandle || null,
-      distributor,          // objeto do bot { handle, name, avatarUrl, ... }
+      distributor,
       uploader:     v.uploader,
+      sentBy:       v.sentBy || null,
       createdAt:    v.createdAt,
     }
   })
