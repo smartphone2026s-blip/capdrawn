@@ -90,7 +90,7 @@ function formatVideos(videos, botMap = {}) {
       botHandle:    v.botHandle || null,
       distributor,
       uploader:     v.uploader,
-      sentBy:       v.sentBy || null,
+      sentBy:       v.sentBy ? { id: v.sentBy.id, handle: v.sentBy.handle, name: v.sentBy.name, avatarUrl: v.sentBy.avatarUrl, isVerified: v.sentBy.isVerified, isVip: v.sentBy.isVip } : null,
       createdAt:    v.createdAt,
     }
   })
