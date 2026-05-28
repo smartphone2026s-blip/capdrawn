@@ -1,10 +1,4 @@
 // pages/api/users/[handle].js
-// Perfil de usuário corrigido:
-// - Retorna videos com views TOTAIS (reais + fake)
-// - Retorna likes TOTAIS
-// - Retorna totalViews e followers atualizados
-// - Suporta vídeos distribuídos por bots (exibe na conta do bot)
-
 import { PrismaClient } from '@prisma/client'
 import jwt from 'jsonwebtoken'
 
@@ -15,7 +9,6 @@ const prisma = globalForPrisma.prisma
 export default async function handler(req, res) {
   const { handle } = req.query
 
-  // ── GET: buscar perfil + vídeos ──────────────────────────
   if (req.method === 'GET') {
     try {
       const user = await prisma.user.findUnique({
@@ -32,7 +25,6 @@ export default async function handler(req, res) {
       })
       if (!user) return res.status(404).json({ ok: false, error: 'Usuário não encontrado' })
 
-      // Para bots: busca vídeos onde botHandle = handle (vídeos que o bot está distribuindo)
       let botVideos = []
       if (user.isBot) {
         botVideos = await prisma.video.findMany({
@@ -40,12 +32,24 @@ export default async function handler(req, res) {
           orderBy: { createdAt: 'desc' },
           include: {
             uploader: { select: { handle: true, name: true, avatarUrl: true } },
+            sentBy:   { select: { handle: true, name: true, avatarUrl: true } },
             _count: { select: { likes: true, comments: true } }
           }
         })
       }
 
-      // Formata vídeos com totais
+      let sentViaBot = []
+      if (!user.isBot) {
+        sentViaBot = await prisma.video.findMany({
+          where: { sentById: user.id, removed: false },
+          orderBy: { createdAt: 'desc' },
+          include: {
+            uploader: { select: { handle: true, name: true, avatarUrl: true, isBot: true } },
+            _count: { select: { likes: true, comments: true } }
+          }
+        })
+      }
+
       const formatVideo = (v, isBotVideo = false) => ({
         id:           v.id,
         url:          v.url,
@@ -56,15 +60,35 @@ export default async function handler(req, res) {
         comments:     v._count?.comments || 0,
         distributed:  v.distributed,
         botHandle:    v.botHandle,
-        uploader:     isBotVideo ? v.uploader : null, // só bots exibem o uploader original
+        uploader:     isBotVideo ? (v.sentBy || v.uploader) : null,
         createdAt:    v.createdAt,
       })
 
-      const allVideos = user.isBot
-        ? botVideos.map(v => formatVideo(v, true))
-        : user.videos.map(v => formatVideo(v, false))
+      let allVideos
+      if (user.isBot) {
+        allVideos = botVideos.map(v => formatVideo(v, true))
+      } else {
+        const directIds = new Set(user.videos.map(v => v.id))
+        const botSent   = sentViaBot.filter(v => !directIds.has(v.id))
+        allVideos = [
+          ...user.videos.map(v => formatVideo(v, false)),
+          ...botSent.map(v => ({
+            id:           v.id,
+            url:          v.url,
+            thumbnailUrl: v.thumbnailUrl,
+            caption:      v.caption,
+            views:        (v.views || 0) + (v.fakeViews || 0),
+            likes:        (v.likesCount || 0) + (v.fakeLikeConv || 0),
+            comments:     v._count?.comments || 0,
+            distributed:  v.distributed,
+            botHandle:    v.botHandle,
+            uploader:     v.uploader,
+            viaBot:       true,
+            createdAt:    v.createdAt,
+          }))
+        ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      }
 
-      // Totais do canal
       const totalLikes = user.videos.reduce((s, v) => s + (v.likesCount || 0) + (v.fakeLikeConv || 0), 0)
       const totalViews = user.totalViews || user.videos.reduce((s, v) => s + (v.views || 0) + (v.fakeViews || 0), 0)
 
@@ -95,7 +119,6 @@ export default async function handler(req, res) {
       return res.status(500).json({ ok: false, error: e.message })
     }
 
-  // ── PUT: atualizar perfil ────────────────────────────────
   } else if (req.method === 'PUT') {
     const authHeader = req.headers.authorization || ''
     const token = authHeader.replace('Bearer ', '').trim()
@@ -114,9 +137,9 @@ export default async function handler(req, res) {
       const user = await prisma.user.update({
         where: { handle },
         data: {
-          ...(name              !== undefined && { name }),
-          ...(desc              !== undefined && { bio: desc }),
-          ...(link              !== undefined && { link }),
+          ...(name !== undefined && { name }),
+          ...(desc !== undefined && { bio: desc }),
+          ...(link !== undefined && { link }),
         }
       })
       return res.json({ ok: true, user })
