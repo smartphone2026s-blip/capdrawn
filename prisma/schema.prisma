@@ -24,10 +24,11 @@ model User {
   channelEmail String?
   link         String?  @default("")
   followers    Int      @default(0)
-  totalViews   Int      @default(0)   // soma de todas as views reais+fake do canal
+  totalViews   Int      @default(0)
   createdAt    DateTime @default(now())
 
   videos        Video[]
+  sentVideos    Video[]        @relation("SentVideos")
   comments      Comment[]
   likes         Like[]
   reports       Report[]
@@ -37,22 +38,25 @@ model User {
 }
 
 model Video {
-  id           String   @id @default(cuid())
-  caption      String?
-  url          String
-  thumbnailUrl String?
-  views        Int      @default(0)       // views reais (usuários que assistiram)
-  fakeViews    Int      @default(0)       // views fake acumuladas
-  likesCount   Int      @default(0)       // likes reais (tabela Like)
-  fakeFollowerConv Int  @default(0)       // seguidores convertidos das views fake (2%)
-  fakeLikeConv Int      @default(0)       // likes convertidos das views fake (10%)
-  distributed  Boolean  @default(false)
-  botHandle    String?                    // handle do bot que está distribuindo
-  removed      Boolean  @default(false)
-  flagged      Boolean  @default(false)
-  uploaderId   String
-  uploader     User     @relation(fields: [uploaderId], references: [id])
-  createdAt    DateTime @default(now())
+  id                 String   @id @default(cuid())
+  caption            String?
+  url                String
+  thumbnailUrl       String?
+  views              Int      @default(0)
+  fakeViews          Int      @default(0)
+  likesCount         Int      @default(0)
+  fakeFollowerConv   Int      @default(0)
+  fakeLikeConv       Int      @default(0)
+  distributed        Boolean  @default(false)
+  botHandle          String?
+  removed            Boolean  @default(false)
+  flagged            Boolean  @default(false)
+  cloudinaryPublicId String?
+  uploaderId         String
+  uploader           User     @relation(fields: [uploaderId], references: [id])
+  sentById           String?
+  sentBy             User?    @relation("SentVideos", fields: [sentById], references: [id])
+  createdAt          DateTime @default(now())
 
   comments Comment[]
   likes    Like[]
@@ -106,7 +110,7 @@ model Notification {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id])
-  type      String   // "first_publish", "new_follower", "rank_up", etc.
+  type      String
   seen      Boolean  @default(false)
   data      Json?
   createdAt DateTime @default(now())
