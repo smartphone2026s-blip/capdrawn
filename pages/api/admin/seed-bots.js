@@ -60,19 +60,21 @@ const ADM_PASSWORD = process.env.ADM_PASSWORD || 'CapDrawn@2017!'
 
 async function seedAdminAccount(hashedAdmPass) {
   try {
-    const adm = await prisma.user.upsert({
-      where: { handle: ADM_HANDLE },
-      update: {
-        isVerified: true,
-        isVip:      true,
-        followers:  999999,
-        totalViews: 50000000,
-        name:       'CapDrawn Oficial',
-        bio:        'Conta oficial da plataforma CapDrawn MemeShorts.\nFundada em 19 de dezembro de 2017.\n\n✅ Canal Verificado · ⭐ VIP · 🏆 Criador Original\n\nO maior feed de memes do Brasil.',
-        area:       'criador',
-        avatarUrl:  `https://api.dicebear.com/7.x/initials/svg?seed=CD&backgroundColor=6366f1&textColor=ffffff&fontSize=40&size=200`,
-      },
-      create: {
+    const existing = await prisma.user.findUnique({ where: { handle: ADM_HANDLE } })
+
+    if (existing) {
+      // Conta já existe: aplica APENAS flags — nunca sobrescreve
+      // name, bio, avatarUrl, followers, totalViews que o ADM pode ter editado
+      const updateData = { isVerified: true, isVip: true, area: 'criador' }
+      if ((existing.followers  || 0) < 999999)    updateData.followers  = 999999
+      if ((existing.totalViews || 0) < 50000000)  updateData.totalViews = 50000000
+      const adm = await prisma.user.update({ where: { handle: ADM_HANDLE }, data: updateData })
+      return { handle: adm.handle, status: 'ok', isAdmin: true }
+    }
+
+    // Conta não existe: cria com todos os defaults
+    const adm = await prisma.user.create({
+      data: {
         handle:     ADM_HANDLE,
         name:       'CapDrawn Oficial',
         email:      ADM_EMAIL,
@@ -83,7 +85,7 @@ async function seedAdminAccount(hashedAdmPass) {
         totalViews: 50000000,
         bio:        'Conta oficial da plataforma CapDrawn MemeShorts.\nFundada em 19 de dezembro de 2017.\n\n✅ Canal Verificado · ⭐ VIP · 🏆 Criador Original\n\nO maior feed de memes do Brasil.',
         area:       'criador',
-        avatarUrl:  `https://api.dicebear.com/7.x/initials/svg?seed=CD&backgroundColor=6366f1&textColor=ffffff&fontSize=40&size=200`,
+        avatarUrl:  'https://api.dicebear.com/7.x/initials/svg?seed=CD&backgroundColor=6366f1&textColor=ffffff&fontSize=40&size=200',
       }
     })
     return { handle: adm.handle, status: 'ok', isAdmin: true }
