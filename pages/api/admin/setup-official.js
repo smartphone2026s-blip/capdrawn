@@ -1,16 +1,4 @@
 // pages/api/admin/setup-official.js
-// Configura (e cria se necessário) a conta CapDrawnOFC como oficial:
-// - isVerified = true
-// - isVip = true
-// - followers = 999999
-// - bio e área de 2017
-//
-// Uso sem token  → cria a conta se não existir (primeiro acesso)
-// Uso com token  → só pode ser chamado pela própria conta CapDrawnOFC
-//
-// POST /api/admin/setup-official
-// Body (apenas quando criando pela 1ª vez): { "password": "SuaSenha" }
-
 import bcrypt from 'bcryptjs'
 import jwt    from 'jsonwebtoken'
 import { PrismaClient } from '@prisma/client'
@@ -22,21 +10,25 @@ const prisma = globalForPrisma.prisma
 const ADM_HANDLE = 'capdrawnOFC'
 const ADM_EMAIL  = 'capdrawnOFC@capdrawn.com'
 
-const ADM_DATA = {
-  name:       'CapDrawn Oficial',
+// Dados fixos (permissões/flags) — nunca sobrescreve campos editáveis pelo ADM
+const ADM_FLAGS = {
   isVerified: true,
   isVip:      true,
   followers:  999999,
   totalViews: 50000000,
-  bio:        'Conta oficial da plataforma CapDrawn MemeShorts.\nFundada em 19 de dezembro de 2017.\n\n✅ Canal Verificado · ⭐ VIP · 🏆 Criador Original\n\nO maior feed de memes do Brasil.',
   area:       'criador',
-  avatarUrl:  'https://api.dicebear.com/7.x/initials/svg?seed=CD&backgroundColor=6366f1&textColor=ffffff&fontSize=40&size=200',
+}
+
+// Dados padrão usados SÓ na criação inicial
+const ADM_DEFAULT_PROFILE = {
+  name:      'CapDrawn Oficial',
+  bio:       'Conta oficial da plataforma CapDrawn MemeShorts.\nFundada em 19 de dezembro de 2017.\n\n✅ Canal Verificado · ⭐ VIP · 🏆 Criador Original\n\nO maior feed de memes do Brasil.',
+  avatarUrl: 'https://api.dicebear.com/7.x/initials/svg?seed=CD&backgroundColor=6366f1&textColor=ffffff&fontSize=40&size=200',
 }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
 
-  // ── Se veio com token, valida que é o próprio ADM ──────────────────────────
   const authHeader = req.headers.authorization || ''
   const token = authHeader.replace('Bearer ', '').trim()
 
@@ -73,11 +65,11 @@ export default async function handler(req, res) {
           handle:   ADM_HANDLE,
           email:    ADM_EMAIL,
           password: hashed,
-          ...ADM_DATA,
+          ...ADM_FLAGS,
+          ...ADM_DEFAULT_PROFILE,
         }
       })
 
-      // Gera token para já logar na sequência
       let loginToken = null
       if (process.env.JWT_SECRET) {
         loginToken = jwt.sign({ userId: created.id }, process.env.JWT_SECRET, { expiresIn: '30d' })
@@ -99,21 +91,22 @@ export default async function handler(req, res) {
       })
     }
 
-    // ── Conta já existe e já está configurada ─────────────────────────────────
+    // ── Conta já está com as flags corretas → não faz nada ────────────────────
     if (existing.isVerified && existing.isVip && existing.followers >= 999999) {
       return res.json({ ok: true, message: 'Conta já está configurada', already: true })
     }
 
-    // ── Conta existe mas precisa ser atualizada ───────────────────────────────
+    // ── Conta existe mas faltam flags → atualiza APENAS as flags, sem tocar em
+    //    name/bio/avatarUrl que o ADM pode ter editado pelo painel ─────────────
     const updated = await prisma.user.update({
       where: { handle: ADM_HANDLE },
-      data:  ADM_DATA,
+      data:  ADM_FLAGS,  // ← só flags, nunca sobrescreve perfil editável
     })
 
     return res.json({
       ok:      true,
       updated: true,
-      message: 'Conta CapDrawnOFC configurada com sucesso!',
+      message: 'Flags da conta CapDrawnOFC restauradas sem apagar o perfil!',
       user: {
         handle:     updated.handle,
         name:       updated.name,
