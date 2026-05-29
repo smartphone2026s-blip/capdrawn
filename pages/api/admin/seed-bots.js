@@ -1,6 +1,7 @@
 // pages/api/admin/seed-bots.js
 // Cria as contas bot no banco de dados (chamar 1x após deploy)
 // Usa DiceBear API para fotos de perfil meme (gratuito, sem auth)
+// TAMBÉM cria a conta ADM capdrawnOFC se ela não existir
 // GET /api/admin/seed-bots → seed + retorna lista
 
 import prisma from '../../../lib/prisma'
@@ -51,20 +52,67 @@ function getBotAvatar(handle, i) {
   return `https://api.dicebear.com/7.x/${style}/svg?seed=${encodeURIComponent(handle)}&size=200`
 }
 
+// ─── Conta ADM oficial ────────────────────────────────────────────────────────
+const ADM_HANDLE   = 'capdrawnOFC'
+const ADM_EMAIL    = 'capdrawnOFC@capdrawn.com'
+// Senha padrão da conta ADM. Troque após o primeiro login!
+const ADM_PASSWORD = process.env.ADM_PASSWORD || 'CapDrawn@2017!'
+
+async function seedAdminAccount(hashedAdmPass) {
+  try {
+    const adm = await prisma.user.upsert({
+      where: { handle: ADM_HANDLE },
+      update: {
+        isVerified: true,
+        isVip:      true,
+        followers:  999999,
+        totalViews: 50000000,
+        name:       'CapDrawn Oficial',
+        bio:        'Conta oficial da plataforma CapDrawn MemeShorts.\nFundada em 19 de dezembro de 2017.\n\n✅ Canal Verificado · ⭐ VIP · 🏆 Criador Original\n\nO maior feed de memes do Brasil.',
+        area:       'criador',
+        avatarUrl:  `https://api.dicebear.com/7.x/initials/svg?seed=CD&backgroundColor=6366f1&textColor=ffffff&fontSize=40&size=200`,
+      },
+      create: {
+        handle:     ADM_HANDLE,
+        name:       'CapDrawn Oficial',
+        email:      ADM_EMAIL,
+        password:   hashedAdmPass,
+        isVerified: true,
+        isVip:      true,
+        followers:  999999,
+        totalViews: 50000000,
+        bio:        'Conta oficial da plataforma CapDrawn MemeShorts.\nFundada em 19 de dezembro de 2017.\n\n✅ Canal Verificado · ⭐ VIP · 🏆 Criador Original\n\nO maior feed de memes do Brasil.',
+        area:       'criador',
+        avatarUrl:  `https://api.dicebear.com/7.x/initials/svg?seed=CD&backgroundColor=6366f1&textColor=ffffff&fontSize=40&size=200`,
+      }
+    })
+    return { handle: adm.handle, status: 'ok', isAdmin: true }
+  } catch (e) {
+    return { handle: ADM_HANDLE, status: 'error', error: e.message, isAdmin: true }
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).end()
 
   try {
-    const hashedPass = await bcrypt.hash('bot_internal_only_2025', 10)
+    const hashedPass    = await bcrypt.hash('bot_internal_only_2025', 10)
+    const hashedAdmPass = await bcrypt.hash(ADM_PASSWORD, 10)
     const results = []
 
+    // 1. Cria/atualiza a conta ADM primeiro
+    const admResult = await seedAdminAccount(hashedAdmPass)
+    results.push(admResult)
+
+    // 2. Cria os bots normais
     for (let i = 0; i < BOT_NAMES.length; i++) {
-      const handle = BOT_HANDLES[i]
-      const name   = BOT_NAMES[i]
-      const email  = `${handle.replace(/\./g,'_')}@capdrawnn.internal`
+      const handle    = BOT_HANDLES[i]
+      const name      = BOT_NAMES[i]
+      const email     = `${handle.replace(/\./g,'_')}@capdrawnn.internal`
       const avatarUrl = getBotAvatar(handle, i)
       const followers = BOT_SUBS_NUM[i % BOT_SUBS_NUM.length]
-      const bio = BOT_DESCS[i % BOT_DESCS.length]
+      const bio       = BOT_DESCS[i % BOT_DESCS.length]
 
       try {
         const user = await prisma.user.upsert({
@@ -73,9 +121,9 @@ export default async function handler(req, res) {
             avatarUrl,
             followers,
             bio,
-            isBot: true,
+            isBot:      true,
             isVerified: i % 3 === 0,
-            isVip: i % 4 === 0,
+            isVip:      i % 4 === 0,
           },
           create: {
             handle,
@@ -96,7 +144,13 @@ export default async function handler(req, res) {
       }
     }
 
-    return res.json({ ok: true, seeded: results.length, results })
+    return res.json({
+      ok: true,
+      seeded: results.length,
+      adminCreated: admResult.status === 'ok',
+      adminEmail: ADM_EMAIL,
+      results,
+    })
   } catch (e) {
     console.error('[seed-bots]', e)
     return res.status(500).json({ ok: false, error: e.message })
