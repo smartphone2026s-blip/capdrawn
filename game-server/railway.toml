@@ -1,0 +1,10 @@
+# game-server/railway.toml
+# Este arquivo é para o SEGUNDO serviço no Railway (o servidor UDP)
+
+[build]
+builder = "nixpacks"
+buildCommand = "npm install"
+
+[deploy]
+startCommand = "node server.js"
+restartPolicyType = "always"
