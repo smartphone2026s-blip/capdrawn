@@ -115,3 +115,56 @@ model Notification {
   data      Json?
   createdAt DateTime @default(now())
 }
+
+// ─── 2D Strike Game ───────────────────────────────────────────────────────────
+
+model GameAccount {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  password  String   // bcrypt hash
+  kills     Int      @default(0)
+  deaths    Int      @default(0)
+  wins      Int      @default(0)
+  losses    Int      @default(0)
+  rank      String   @default("Low")
+  isOnline  Boolean  @default(false)
+  lastSeen  DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  friends       GameFriend[]  @relation("GameFriendOwner")
+  friendOf      GameFriend[]  @relation("GameFriendTarget")
+  sentRequests  GameFriendReq[] @relation("GameFriendReqSender")
+  recvRequests  GameFriendReq[] @relation("GameFriendReqReceiver")
+}
+
+model GameFriend {
+  id       String      @id @default(cuid())
+  ownerId  String
+  targetId String
+  owner    GameAccount @relation("GameFriendOwner",  fields: [ownerId],  references: [id])
+  target   GameAccount @relation("GameFriendTarget", fields: [targetId], references: [id])
+
+  @@unique([ownerId, targetId])
+}
+
+model GameFriendReq {
+  id         String      @id @default(cuid())
+  senderId   String
+  receiverId String
+  sender     GameAccount @relation("GameFriendReqSender",   fields: [senderId],   references: [id])
+  receiver   GameAccount @relation("GameFriendReqReceiver", fields: [receiverId], references: [id])
+  createdAt  DateTime    @default(now())
+
+  @@unique([senderId, receiverId])
+}
+
+model GameRoom {
+  id        String   @id @default(cuid())
+  name      String
+  mapName   String   @default("default")
+  maxPlayers Int     @default(8)
+  hostIp    String
+  hostPort  Int
+  isOpen    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
