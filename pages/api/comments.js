@@ -1,38 +1,59 @@
 // pages/api/comments.js
-// Comentários reais de vídeos — salva e carrega do banco de dados
+// Comentários reais de vídeos + chat global da home — salva e carrega do banco
 // Bots NÃO comentam em vídeos reais (apenas no chat da home)
 
 import prisma from '../../lib/prisma'
 import jwt from 'jsonwebtoken'
 
+function shapeComment(c) {
+  return {
+    id:        c.id,
+    text:      c.text,
+    gifUrl:    c.gifUrl || null,
+    createdAt: c.createdAt,
+    user: {
+      handle:     c.user.handle,
+      name:       c.user.name,
+      avatarUrl:  c.user.avatarUrl,
+      isVerified: c.user.isVerified,
+      isVip:      c.user.isVip,
+    },
+    reactions: (c.reactions || []).reduce((acc, r) => {
+      acc[r.emoji] = acc[r.emoji] || { emoji: r.emoji, count: 0, byMe: false }
+      acc[r.emoji].count++
+      if (r.userId === c._meId) acc[r.emoji].byMe = true
+      return acc
+    }, {})
+  }
+}
+
+function getUserId(req) {
+  const authHeader = req.headers.authorization || ''
+  const token = authHeader.replace('Bearer ', '').trim()
+  if (!token) return null
+  try {
+    return jwt.verify(token, process.env.JWT_SECRET).userId
+  } catch {
+    return null
+  }
+}
+
 export default async function handler(req, res) {
 
-  // ── POST: salvar comentário ──────────────────────────────
+  // ── POST: salvar comentário (texto e/ou GIF) ──────────────
   if (req.method === 'POST') {
-    const { text, videoId } = req.body
+    const { text, gifUrl, videoId } = req.body
 
-    if (!text || !text.trim())
+    if ((!text || !text.trim()) && !gifUrl)
       return res.status(400).json({ ok: false, error: 'Comentário vazio' })
 
-    // videoId null/undefined = comentário da home (chat da comunidade)
     const isHomeComment = !videoId
 
-    // Requer autenticação JWT
-    const authHeader = req.headers.authorization || ''
-    const token = authHeader.replace('Bearer ', '').trim()
-    if (!token)
+    const userId = getUserId(req)
+    if (!userId)
       return res.status(401).json({ ok: false, error: 'Login obrigatório para comentar' })
 
-    let userId
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET)
-      userId = decoded.userId
-    } catch {
-      return res.status(401).json({ ok: false, error: 'Token inválido' })
-    }
-
-    try {
-      // Para comentários da home, não verifica vídeo
       if (!isHomeComment) {
         const video = await prisma.video.findUnique({ where: { id: videoId } })
         if (!video || video.removed)
@@ -41,103 +62,56 @@ export default async function handler(req, res) {
 
       const comment = await prisma.comment.create({
         data: {
-          text: text.trim(),
+          text: (text || '').trim(),
+          gifUrl: gifUrl || null,
           userId,
           videoId: isHomeComment ? null : videoId,
         },
         include: {
-          user: { select: { handle: true, name: true, avatarUrl: true, isVerified: true, isVip: true } }
+          user: { select: { handle: true, name: true, avatarUrl: true, isVerified: true, isVip: true } },
+          reactions: true,
         }
       })
 
-      // Confirmação explícita de que foi salvo
-      return res.json({
-        ok: true,
-        saved: true,   // frontend usa isso para mostrar "✅ Comentário salvo!"
-        comment: {
-          id:        comment.id,
-          text:      comment.text,
-          createdAt: comment.createdAt,
-          user: {
-            handle:     comment.user.handle,
-            name:       comment.user.name,
-            avatarUrl:  comment.user.avatarUrl,
-            isVerified: comment.user.isVerified,
-            isVip:      comment.user.isVip,
-          }
-        }
-      })
+      comment.reactions.forEach(r => { r._meId = userId })
+      return res.json({ ok: true, saved: true, comment: shapeComment({ ...comment, _meId: userId }) })
     } catch (e) {
       console.error('[comments POST]', e)
       return res.status(500).json({ ok: false, saved: false, error: 'Erro ao salvar comentário no servidor' })
     }
 
-  // ── GET: carregar comentários de um vídeo ──────────────────
+  // ── GET: carregar comentários (com suporte a polling via ?since=) ──
   } else if (req.method === 'GET') {
-    const { videoId } = req.query
+    const { videoId, since } = req.query
     if (!videoId)
       return res.status(400).json({ ok: false, error: 'videoId obrigatório' })
 
-    // videoId=home → retorna comentários da comunidade (sem videoId no banco)
-    if (videoId === 'home') {
-      try {
-        const comments = await prisma.comment.findMany({
-          where: { videoId: null },
-          orderBy: { createdAt: 'asc' },
-          take: 200,
-          include: {
-            user: {
-              select: { handle: true, name: true, avatarUrl: true, isVerified: true, isVip: true }
-            }
-          }
-        })
-        return res.json({
-          ok: true,
-          comments: comments.map(c => ({
-            id:        c.id,
-            text:      c.text,
-            createdAt: c.createdAt,
-            user: {
-              handle:     c.user.handle,
-              name:       c.user.name,
-              avatarUrl:  c.user.avatarUrl,
-              isVerified: c.user.isVerified,
-              isVip:      c.user.isVip,
-            }
-          }))
-        })
-      } catch (e) {
-        console.error('[comments GET home]', e)
-        return res.status(500).json({ ok: false, error: 'Erro ao buscar comentários da home' })
-      }
+    const meId = getUserId(req)
+    const isHome = videoId === 'home'
+
+    const where = isHome
+      ? { videoId: null }
+      : { videoId, video: { removed: false } }
+
+    if (since) {
+      where.createdAt = { gt: new Date(since) }
     }
 
     try {
       const comments = await prisma.comment.findMany({
-        where: { videoId, video: { removed: false } },
+        where,
         orderBy: { createdAt: 'asc' },
-        take: 200,
+        take: since ? 100 : 200,
         include: {
-          user: {
-            select: { handle: true, name: true, avatarUrl: true, isVerified: true, isVip: true }
-          }
+          user: { select: { handle: true, name: true, avatarUrl: true, isVerified: true, isVip: true } },
+          reactions: true,
         }
       })
 
       return res.json({
         ok: true,
-        comments: comments.map(c => ({
-          id:        c.id,
-          text:      c.text,
-          createdAt: c.createdAt,
-          user: {
-            handle:     c.user.handle,
-            name:       c.user.name,
-            avatarUrl:  c.user.avatarUrl,
-            isVerified: c.user.isVerified,
-            isVip:      c.user.isVip,
-          }
-        }))
+        serverTime: new Date().toISOString(),
+        comments: comments.map(c => shapeComment({ ...c, _meId: meId }))
       })
     } catch (e) {
       console.error('[comments GET]', e)
