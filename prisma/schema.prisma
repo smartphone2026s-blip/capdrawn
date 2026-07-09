@@ -1,3 +1,5 @@
+eTime @default(now())
+}
 // prisma/schema.prisma
 
 datasource db {
@@ -30,6 +32,7 @@ model User {
   videos        Video[]
   sentVideos    Video[]        @relation("SentVideos")
   comments      Comment[]
+  reactions     CommentReaction[]
   likes         Like[]
   reports       Report[]
   notifications Notification[]
@@ -66,11 +69,26 @@ model Video {
 model Comment {
   id        String   @id @default(cuid())
   text      String
+  gifUrl    String?
   userId    String
   user      User     @relation(fields: [userId], references: [id])
   videoId   String?
   video     Video?   @relation(fields: [videoId], references: [id])
   createdAt DateTime @default(now())
+
+  reactions CommentReaction[]
+}
+
+model CommentReaction {
+  id        String   @id @default(cuid())
+  emoji     String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  commentId String
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, commentId, emoji])
 }
 
 model Like {
